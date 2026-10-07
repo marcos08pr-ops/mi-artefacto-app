@@ -1,5 +1,20 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Enten</title>
+<link rel="apple-touch-icon" sizes="1024x1024" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="1024x1024" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Enten">
+<script>
+// El icono Σ va en <head>, que es donde Safari y Android lo buscan al añadir a la pantalla de inicio.
+(function () {
+  try {
+    var h = document.head, url = new URL('apple-touch-icon.png', location.href).href;
+    [['apple-touch-icon'], ['icon', 'image/png']].forEach(function (x) {
+      h.querySelectorAll('link[rel="' + x[0] + '"]').forEach(function (l) { l.remove(); });
+      var l = document.createElement('link'); l.rel = x[0]; l.href = url; l.setAttribute('sizes', '1024x1024'); if (x[1]) l.type = x[1]; h.appendChild(l);
+    });
+  } catch (e) {}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..800&display=swap">
@@ -3720,8 +3735,8 @@ ON.setRest = (el) => { S.settings.restSec = +el.value; saveSettings(); };
 ON.setKcalSrc = (el) => { S.settings.kcalSource = el.value; saveSettings(); bump(); render(); };
 ACT.homeScreen = () => {
   sheet('<ol class="steps-ol"><li>Abre este enlace de Enten en <b>Safari</b> en tu iPhone (con tu sesión de Claude iniciada).</li><li>Toca <b>Compartir</b> → <b>Añadir a pantalla de inicio</b> → nómbrala «Enten».</li></ol>' +
-    '<p class="fg2">Para usar el icono Σ: en <b>Atajos</b> crea un atajo con la acción <b>Abrir URL</b> (el enlace de Enten), toca su nombre → <b>Añadir a pantalla de inicio</b> y elige como imagen el icono que te paso en el chat.</p>' +
-    '<div style="display:flex;justify-content:center">' + logoSvg(120) + '</div>', { title: 'Enten en tu pantalla de inicio' });
+    '<p class="fg2">Para usar el icono Σ: en <b>Atajos</b> crea un atajo con la acción <b>Abrir URL</b> (el enlace de Enten), toca su nombre → <b>Añadir a pantalla de inicio</b> y elige como imagen este icono: mantenlo pulsado → <b>Guardar en Fotos</b>.</p>' +
+    '<div style="display:flex;justify-content:center"><img src="apple-touch-icon.png" width="120" height="120" alt="Icono Σ de Enten" style="border-radius:24%"></div>', { title: 'Enten en tu pantalla de inicio' });
 };
 
 /* ---------- perfil ---------- */
