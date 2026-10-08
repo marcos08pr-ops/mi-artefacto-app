@@ -1227,8 +1227,9 @@ const AI = {
     if (e && e.code && !(e instanceof Error)) return e;
     if (S.APIUserAbortError && e instanceof S.APIUserAbortError) return { code: 'cancelled' };
     if (e && e.name === 'AbortError') return { code: 'cancelled' };
-    if (S.AuthenticationError && e instanceof S.AuthenticationError) return { code: 'bad_key' };
-    if (S.PermissionDeniedError && e instanceof S.PermissionDeniedError) return { code: 'bad_key' };
+    const detail = e ? (e.status ? e.status + ' · ' : '') + String((e.error && e.error.error && e.error.error.message) || e.message || '').slice(0, 160) : '';
+    if (S.AuthenticationError && e instanceof S.AuthenticationError) return { code: 'bad_key', detail };
+    if (S.PermissionDeniedError && e instanceof S.PermissionDeniedError) return { code: 'denied', detail };
     if (S.RateLimitError && e instanceof S.RateLimitError) return { code: 'rate_limited' };
     if (S.BadRequestError && e instanceof S.BadRequestError) {
       const m = String((e && e.message) || '');
@@ -1305,7 +1306,8 @@ const AI = {
       case 'empty_completion': return 'No ha llegado respuesta. Prueba a pedir algo más concreto.';
       case 'invalid_json': return 'La respuesta no tenía el formato esperado. Vuelve a intentarlo.';
       case 'prompt_too_large': return 'Demasiados datos para una sola consulta. Empieza una conversación nueva.';
-      case 'bad_key': return 'La clave de API no es válida o se ha revocado. Cámbiala en Ajustes → IA sin Claude.';
+      case 'bad_key': return 'La clave de API no es válida o se ha revocado. Cámbiala en Ajustes → IA sin Claude.' + (e.detail ? ' (Anthropic: ' + e.detail + ')' : '');
+      case 'denied': return 'Anthropic ha rechazado la petición.' + (e.detail ? ' (Anthropic: ' + e.detail + ')' : '');
       case 'no_credit': return 'Tu cuenta de la API de Anthropic no tiene saldo. Añade crédito en console.anthropic.com.';
       case 'sdk_load': return 'No se ha podido cargar la conexión con Claude. Revisa tu conexión a internet.';
       default: return 'Fallo de conexión con la IA. Inténtalo de nuevo.';
