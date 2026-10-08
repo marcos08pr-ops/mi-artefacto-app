@@ -3734,8 +3734,8 @@ ACT.toggleSet = (el) => {
 ON.setRest = (el) => { S.settings.restSec = +el.value; saveSettings(); };
 ON.setKcalSrc = (el) => { S.settings.kcalSource = el.value; saveSettings(); bump(); render(); };
 ACT.homeScreen = () => {
-  sheet('<ol class="steps-ol"><li>Abre este enlace de Enten en <b>Safari</b> en tu iPhone (con tu sesión de Claude iniciada).</li><li>Toca <b>Compartir</b> → <b>Añadir a pantalla de inicio</b> → nómbrala «Enten».</li></ol>' +
-    '<p class="fg2">Para usar el icono Σ: en <b>Atajos</b> crea un atajo con la acción <b>Abrir URL</b> (el enlace de Enten), toca su nombre → <b>Añadir a pantalla de inicio</b> y elige como imagen este icono: mantenlo pulsado → <b>Guardar en Fotos</b>.</p>' +
+  sheet('<ol class="steps-ol"><li>Abre este enlace de Enten en <b>Safari</b> en tu iPhone (con tu sesión de Claude iniciada).</li><li>Toca <b>Compartir</b> → <b>Añadir a pantalla de inicio</b> → nómbrala «Enten».</li><li>Deja activado <b>Abrir como app web</b>: así se abre a pantalla completa, sin la barra de Safari abajo. La primera vez tendrás que iniciar sesión en Claude dentro de la app.</li></ol>' +
+    '<p class="fg2">Si prefieres el icono Σ (pero con la barra de Safari): en <b>Atajos</b> crea un atajo con la acción <b>Abrir URL</b> (el enlace de Enten), toca su nombre → <b>Añadir a pantalla de inicio</b> y elige como imagen este icono: mantenlo pulsado → <b>Guardar en Fotos</b>.</p>' +
     '<div style="display:flex;justify-content:center"><img src="apple-touch-icon.png" width="120" height="120" alt="Icono Σ de Enten" style="border-radius:24%"></div>', { title: 'Enten en tu pantalla de inicio' });
 };
 
