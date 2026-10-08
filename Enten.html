@@ -3,11 +3,18 @@
 <link rel="apple-touch-icon" sizes="1024x1024" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="1024x1024" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Enten">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08070c">
+<link rel="manifest" href="manifest.webmanifest">
 <script>
 // El icono Σ va en <head>, que es donde Safari y Android lo buscan al añadir a la pantalla de inicio.
 (function () {
   try {
     var h = document.head, url = new URL('apple-touch-icon.png', location.href).href;
+    function $$mv(sel) { document.body && document.body.querySelectorAll(sel).forEach(function (n) { h.appendChild(n); }); }
+    $$mv('meta[name="apple-mobile-web-app-capable"],meta[name="mobile-web-app-capable"],meta[name="apple-mobile-web-app-status-bar-style"],meta[name="theme-color"],meta[name="apple-mobile-web-app-title"],link[rel="manifest"]');
     [['apple-touch-icon'], ['icon', 'image/png']].forEach(function (x) {
       h.querySelectorAll('link[rel="' + x[0] + '"]').forEach(function (l) { l.remove(); });
       var l = document.createElement('link'); l.rel = x[0]; l.href = url; l.setAttribute('sizes', '1024x1024'); if (x[1]) l.type = x[1]; h.appendChild(l);
@@ -1166,21 +1173,121 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pagehide', () => { Store.flushAll(); });
 
 // ---- 03-ai.js ----
-/* ============ Enten · IA (capacidad sample de Claude) ============ */
+/* ============ Enten · IA ============
+   Dentro de Claude: capacidad sample (sin clave).
+   Fuera de Claude (Enten alojado en tu web, p. ej. GitHub Pages): API de Anthropic con tu propia clave,
+   guardada solo en este navegador. El SDK oficial se carga bajo demanda desde jsDelivr. */
+const API_KEY_LS = 'enten1:apiKey';
+const API_MODEL = 'claude-opus-5-5';
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.132.1/+esm';
+const AI_OFF = 'La IA funciona dentro de Claude o, fuera de Claude, con tu clave de API (Ajustes → IA sin Claude).';
 const AI = {
-  fn: null, lim: null, state: 'none', // 'ready' | 'none' | 'denied'
+  fn: null, lim: null, state: 'none', mode: null, // state: 'ready' | 'none' | 'denied' · mode: 'claude' | 'api'
+  sdk: null, client: null,
+  inClaude() { return !!(window.claude && typeof window.claude.use === 'function'); },
+  getKey() { try { return localStorage.getItem(API_KEY_LS) || ''; } catch (e) { return ''; } },
+  setKey(k) {
+    try { if (k) localStorage.setItem(API_KEY_LS, k); else localStorage.removeItem(API_KEY_LS); } catch (e) { return false; }
+    this.client = null;
+    this.initApi();
+    return true;
+  },
+  initApi() {
+    if (this.mode === 'claude') return;
+    if (this.getKey()) { this.mode = 'api'; this.state = 'ready'; }
+    else { this.mode = null; this.state = 'none'; }
+  },
   async init() {
-    try { if (window.claude && typeof window.claude.use === 'function') this.fn = await window.claude.use('sample'); } catch (e) { this.fn = null; }
+    try { if (this.inClaude()) this.fn = await window.claude.use('sample'); } catch (e) { this.fn = null; }
     if (this.fn) {
+      this.mode = 'claude';
       this.state = 'ready';
       try { this.lim = await this.fn.limits(); } catch (e) { this.lim = null; }
+      return;
     }
+    // Dentro de Claude la página no puede llamar a otros servidores, así que la clave solo sirve fuera.
+    if (!this.inClaude()) this.initApi();
   },
   ok() { return this.state === 'ready'; },
-  canImg() { return this.ok() && !!(this.lim && this.lim.images); },
-  maxImg() { return (this.lim && this.lim.images && this.lim.images.maxCount) || 1; },
-  text(input, o) { return this.fn(input, o || {}); },
-  json(input, o) { return this.fn.json(input, o || {}); },
+  canImg() { return this.ok() && (this.mode === 'api' || !!(this.lim && this.lim.images)); },
+  maxImg() { return this.mode === 'api' ? 4 : (this.lim && this.lim.images && this.lim.images.maxCount) || 1; },
+  text(input, o) { return this.mode === 'api' ? this.apiText(input, o || {}) : this.fn(input, o || {}); },
+  json(input, o) { return this.mode === 'api' ? this.apiJson(input, o || {}) : this.fn.json(input, o || {}); },
+
+  async apiClient() {
+    if (this.client) return this.client;
+    if (!this.sdk) {
+      try { this.sdk = await import(SDK_URL); } catch (e) { throw { code: 'sdk_load' }; }
+    }
+    this.client = new this.sdk.default({ apiKey: this.getKey(), dangerouslyAllowBrowser: true });
+    return this.client;
+  },
+  apiErr(e) {
+    const S = this.sdk || {};
+    if (e && e.code && !(e instanceof Error)) return e;
+    if (S.APIUserAbortError && e instanceof S.APIUserAbortError) return { code: 'cancelled' };
+    if (e && e.name === 'AbortError') return { code: 'cancelled' };
+    if (S.AuthenticationError && e instanceof S.AuthenticationError) return { code: 'bad_key' };
+    if (S.PermissionDeniedError && e instanceof S.PermissionDeniedError) return { code: 'bad_key' };
+    if (S.RateLimitError && e instanceof S.RateLimitError) return { code: 'rate_limited' };
+    if (S.BadRequestError && e instanceof S.BadRequestError) {
+      const m = String((e && e.message) || '');
+      if (/credit balance/i.test(m)) return { code: 'no_credit' };
+      if (/too long|too large/i.test(m)) return { code: 'prompt_too_large' };
+      return { code: 'upstream_error' };
+    }
+    console.warn('API', e);
+    return { code: 'upstream_error' };
+  },
+  /* Conversación del coach: mismos turnos que con Claude, con respuesta en streaming. */
+  async apiText(turns, o) {
+    const msgs = (typeof turns === 'string' ? [{ role: 'user', content: turns }] : turns).map((m) => ({ role: m.role, content: m.content }));
+    let text = '';
+    try {
+      const client = await this.apiClient();
+      const stream = client.beta.messages.stream({
+        model: API_MODEL,
+        max_tokens: 16000,
+        output_config: { effort: o.modelTier === 'complex' ? 'medium' : 'low' },
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        messages: msgs,
+      }, { signal: o.signal });
+      stream.on('text', (d, snap) => { text = snap; if (o.onText) o.onText({ text: snap }); });
+      const fin = await stream.finalMessage();
+      if (fin.stop_reason === 'refusal') throw { code: 'refused', text };
+      const out = fin.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+      if (!out.trim()) throw { code: 'empty_completion' };
+      return { text: out, truncated: fin.stop_reason === 'max_tokens' };
+    } catch (e) {
+      const r = this.apiErr(e);
+      if (text && !r.text) r.text = text;
+      throw r;
+    }
+  },
+  /* Comida por foto/texto y rutina pegada: respuesta en JSON. */
+  async apiJson(prompt, o) {
+    const content = [];
+    for (const f of (o.images || []).slice(0, 4)) content.push(await imageBlock(f));
+    content.push({ type: 'text', text: prompt + '\nResponde únicamente con el JSON, sin texto antes ni después.' });
+    let res;
+    try {
+      const client = await this.apiClient();
+      res = await client.beta.messages.create({
+        model: API_MODEL,
+        max_tokens: 16000,
+        output_config: { effort: 'low' },
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        messages: [{ role: 'user', content }],
+      }, { signal: o.signal });
+    } catch (e) { throw this.apiErr(e); }
+    if (res.stop_reason === 'refusal') throw { code: 'refused' };
+    const t = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a < 0 || b <= a) throw { code: 'invalid_json' };
+    try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { throw { code: 'invalid_json' }; }
+  },
   msg(e) {
     const c = (e && e.code) || 'upstream_error';
     if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].indexOf(c) >= 0) {
@@ -1198,10 +1305,29 @@ const AI = {
       case 'empty_completion': return 'No ha llegado respuesta. Prueba a pedir algo más concreto.';
       case 'invalid_json': return 'La respuesta no tenía el formato esperado. Vuelve a intentarlo.';
       case 'prompt_too_large': return 'Demasiados datos para una sola consulta. Empieza una conversación nueva.';
+      case 'bad_key': return 'La clave de API no es válida o se ha revocado. Cámbiala en Ajustes → IA sin Claude.';
+      case 'no_credit': return 'Tu cuenta de la API de Anthropic no tiene saldo. Añade crédito en console.anthropic.com.';
+      case 'sdk_load': return 'No se ha podido cargar la conexión con Claude. Revisa tu conexión a internet.';
       default: return 'Fallo de conexión con la IA. Inténtalo de nuevo.';
     }
   },
 };
+
+function imageBlock(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1568 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      res({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] } });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej({ code: 'image_rejected' }); };
+    img.src = url;
+  });
+}
 
 /* ---------- comida por foto o descripción ---------- */
 const FOOD_JSON_SHAPE = `{"plato":"nombre corto","items":[{"nombre":"Arroz blanco cocido","gramos":180,"kcal":234,"proteina":4.9,"carbohidratos":50.4,"grasa":0.5,"fibra":0.7,"confianza":"alta"}],"comida_sugerida":"comida","notas":"supuestos en una frase"}`;
@@ -2779,7 +2905,7 @@ ACT.useTpl = async (el) => {
 };
 ACT.openImportRoutine = () => {
   closeAllSheets();
-  if (!AI.ok()) { toast('La IA está disponible al abrir Enten dentro de Claude. Mientras, usa una plantilla o créala a mano.'); return; }
+  if (!AI.ok()) { toast(AI_OFF + ' Mientras, usa una plantilla o créala a mano.'); return; }
   sheet('<p class="muted">Pega tu rutina tal cual (de notas, WhatsApp o un PDF). Ejemplo: «Lunes pecho: press banca 4x8-10, aperturas 3x12…». La IA la convierte, asigna los músculos y luego puedes revisarla.</p>' +
     '<label class="field"><span>Tu rutina</span><textarea id="rtIn" placeholder="Día 1 – Pecho y tríceps&#10;Press banca 4x8&#10;…"></textarea></label>' +
     '<p class="thinking" id="rtStatus" hidden><i class="spin"></i>Leyendo tu rutina…</p><div class="btn-row"><button class="btn btn-primary" data-act="parseRoutine">' + ic('sparkle') + 'Convertir</button></div>', { title: 'Importar rutina' });
@@ -3125,8 +3251,8 @@ ACT.addFood = (el) => {
     '<button class="method" data-act="foodRecent">' + ic('list') + '<b>Recientes</b><span>Repite con un toque</span></button></div>', { title: 'Añadir comida' });
 };
 ACT.pickMeal = (el) => { UI.addMeal = el.dataset.m; $$('#mealChips .chip').forEach((c) => c.classList.toggle('on', c === el)); };
-ACT.noAi = () => toast('La IA funciona al abrir Enten dentro de Claude (web o app). Mientras, usa Buscar o Rápido.');
-ACT.noAiImg = () => toast(AI.ok() ? 'Esta vista no admite fotos. Usa Describir.' : 'El escáner por foto funciona al abrir Enten dentro de Claude.');
+ACT.noAi = () => toast(AI_OFF + ' Mientras, usa Buscar o Rápido.');
+ACT.noAiImg = () => toast(AI.ok() ? 'Esta vista no admite fotos. Usa Describir.' : AI_OFF);
 
 async function analyzePhotos(files) {
   if (!AI.canImg()) { ACT.noAiImg(); return; }
@@ -3573,8 +3699,11 @@ VIEWS.coach = function () {
     (UI.chatBusy ? '<button class="send stop" type="button" data-act="coachStop" aria-label="Detener">' + ic('x') + '</button>' : '<button class="send" type="submit" aria-label="Enviar"' + (AI.ok() ? '' : ' disabled') + '>' + ic('send') + '</button>') + '</form>';
 };
 function aiOffCard() {
-  const why = AI.state === 'denied' ? 'Has denegado el permiso o tu cuenta no tiene la IA activada. Recarga la página y acepta el aviso para usarla.' : 'El coach usa Claude y funciona cuando abres Enten dentro de claude.ai o de la app de Claude. Los consejos automáticos de la pantalla Hoy funcionan siempre.';
-  return '<section class="card"><div class="ins lvl-warn" style="border:0;padding:0"><div class="ins-i">' + ic('info') + '</div><b>Coach sin conexión</b><p>' + esc(why) + '</p></div></section>';
+  const why = AI.state === 'denied' ? 'Has denegado el permiso o tu cuenta no tiene la IA activada. Recarga la página y acepta el aviso para usarla.'
+    : AI.inClaude() ? 'El coach usa Claude. Recarga la página para activarlo.'
+    : 'Fuera de Claude, el coach funciona con tu propia clave de la API de Anthropic. Los consejos automáticos de la pantalla Hoy funcionan siempre.';
+  return '<section class="card"><div class="ins lvl-warn" style="border:0;padding:0"><div class="ins-i">' + ic('info') + '</div><b>Coach sin conexión</b><p>' + esc(why) + '</p></div>' +
+    (AI.inClaude() ? '' : '<button class="btn btn-primary" data-act="apiKeySheet">' + ic('sparkle') + 'Poner mi clave de API</button>') + '</section>';
 }
 function coachIntro() {
   const ins = insights().slice(0, 3);
@@ -3612,6 +3741,7 @@ ACT.coachSubmit = () => {
   const el = $('#coachIn'), q = (el && el.value || '').trim();
   if (!q) return;
   UI.coachDraft = '';
+  el.value = '';
   coachSend(q);
 };
 ACT.coachAsk = (el) => { closeAllSheets(); coachSend(el.dataset.q); };
@@ -3652,7 +3782,7 @@ function buildTurns(hist) {
 async function coachSend(q) {
   q = String(q || '').trim();
   if (!q) return;
-  if (!AI.ok()) { if (UI.tab !== 'coach') go('coach'); toast('El coach funciona al abrir Enten dentro de Claude.'); return; }
+  if (!AI.ok()) { if (UI.tab !== 'coach') go('coach'); toast(AI_OFF); return; }
   if (UI.chatBusy) { toast('Espera a que termine la respuesta'); return; }
   if (!S.chat) S.chat = { messages: [] };
   const msgs = S.chat.messages;
@@ -3715,9 +3845,10 @@ ACT.openSettings = () => {
     '<div class="setrow"><div><b>Objetivo de pasos</b></div><button class="btn btn-sm" data-act="openSteps">' + fmt(st.stepGoal) + '</button></div>' +
     '<div class="setrow"><div><b>Calorías del día</b><span class="muted small">Si registras en Fastic y en Enten</span></div><select data-on="setKcalSrc" aria-label="Fuente de calorías"><option value="auto"' + (st.kcalSource === 'auto' ? ' selected' : '') + '>Enten; si está vacío, Salud</option><option value="enten"' + (st.kcalSource === 'enten' ? ' selected' : '') + '>Solo Enten</option><option value="salud"' + (st.kcalSource === 'salud' ? ' selected' : '') + '>Solo Salud (Fastic)</option></select></div>' +
     '<div class="setrow"><div><b>Apple Salud, Fastic y StepsApp</b><span class="muted small">' + (st.lastSync ? 'Última vez: ' + esc(relD(dk(new Date(st.lastSync))).toLowerCase()) + ' ' + hm(st.lastSync) : 'Sin sincronizar') + '</span></div><button class="btn btn-sm" data-act="openSync">' + ic('sync') + 'Abrir</button></div></section>' +
+    (AI.inClaude() ? '' : '<section class="card"><p class="eyebrow">IA sin Claude</p><div class="setrow"><div><b>Clave de la API de Anthropic</b><span class="muted small">' + (AI.getKey() ? 'Guardada en este navegador · ' + esc(AI.getKey().slice(0, 10)) + '…' : 'Sin clave: el coach y el escáner están desactivados') + '</span></div><button class="btn btn-sm" data-act="apiKeySheet">' + (AI.getKey() ? 'Cambiar' : 'Añadir') + '</button></div></section>') +
     '<section class="card"><p class="eyebrow">Tu iPhone</p><div class="setrow"><div><b>Enten en la pantalla de inicio</b><span class="muted small">Con el icono Σ</span></div><button class="btn btn-sm" data-act="homeScreen">Cómo</button></div></section>' +
     '<section class="card"><p class="eyebrow">Datos</p><div class="setrow"><div><b>Almacenamiento</b><span class="muted small">' + esc(mode) + '</span></div></div>' +
-    '<div class="setrow"><div><b>IA</b><span class="muted small">' + (AI.ok() ? 'Activa (Claude)' + (AI.canImg() ? ' · fotos' : '') : AI.state === 'denied' ? 'Sin permiso en esta vista' : 'Disponible al abrir Enten en Claude') + '</span></div></div>' +
+    '<div class="setrow"><div><b>IA</b><span class="muted small">' + (AI.ok() ? (AI.mode === 'api' ? 'Activa (tu clave de API)' : 'Activa (Claude)') + (AI.canImg() ? ' · fotos' : '') : AI.state === 'denied' ? 'Sin permiso en esta vista' : 'Desactivada: dentro de Claude o con tu clave de API en Claude') + '</span></div></div>' +
     '<div class="btn-row"><button class="btn" data-act="exportData">' + ic('download') + 'Exportar copia</button><label class="btn" for="fJson">' + ic('upload') + 'Importar</label></div>' +
     '<button class="btn btn-ghost danger-t" data-act="wipeData">' + ic('trash') + 'Borrar todos mis datos</button></section>' +
     '<section class="card"><p class="eyebrow">Base científica del coach</p>' + SOURCES.map((s) => '<div class="src"><a href="' + esc(s[1]) + '" target="_blank" rel="noopener">' + esc(s[0]) + '</a></div>').join('') + '</section>' +
@@ -3733,6 +3864,24 @@ ACT.toggleSet = (el) => {
 };
 ON.setRest = (el) => { S.settings.restSec = +el.value; saveSettings(); };
 ON.setKcalSrc = (el) => { S.settings.kcalSource = el.value; saveSettings(); bump(); render(); };
+ACT.apiKeySheet = () => {
+  closeAllSheets();
+  const k = AI.getKey();
+  sheet('<p class="fg2">Con tu propia clave, el coach, el escáner de comida y la importación de rutinas funcionan sin abrir Claude. Cada consulta se cobra en tu cuenta de la API de Anthropic, aparte de tu suscripción de Claude.</p>' +
+    '<ol class="steps-ol"><li>Entra en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> y añade algo de saldo.</li><li>Crea una clave en <b>API Keys</b> y pégala aquí.</li></ol>' +
+    '<form class="form" data-submit="apiKeySave"><label class="field"><span>Clave de API</span><input id="apiKeyIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…" value="' + esc(k) + '"></label>' +
+    '<p class="muted small">Se guarda solo en este navegador y viaja únicamente a api.anthropic.com. No la uses en un dispositivo compartido.</p>' +
+    '<div class="btn-row">' + (k ? '<button class="btn btn-danger" type="button" data-act="apiKeyDel">' + ic('trash') + 'Quitar</button>' : '') + '<button class="btn btn-primary" type="submit">Guardar</button></div></form>', { title: 'IA sin Claude' });
+};
+ACT.apiKeySave = () => {
+  const k = (($('#apiKeyIn') || {}).value || '').trim();
+  if (!/^sk-ant-/.test(k)) { toast('La clave empieza por sk-ant-'); return; }
+  if (!AI.setKey(k)) { toast('Este navegador no deja guardar la clave'); return; }
+  closeAllSheets();
+  render();
+  toast('Clave guardada. El coach ya funciona sin Claude.');
+};
+ACT.apiKeyDel = () => { AI.setKey(''); closeAllSheets(); render(); toast('Clave quitada'); };
 ACT.homeScreen = () => {
   sheet('<ol class="steps-ol"><li>Abre este enlace de Enten en <b>Safari</b> en tu iPhone (con tu sesión de Claude iniciada).</li><li>Toca <b>Compartir</b> → <b>Añadir a pantalla de inicio</b> → nómbrala «Enten».</li><li>Deja activado <b>Abrir como app web</b>: así se abre a pantalla completa, sin la barra de Safari abajo. La primera vez tendrás que iniciar sesión en Claude dentro de la app.</li></ol>' +
     '<p class="fg2">Si prefieres el icono Σ (pero con la barra de Safari): en <b>Atajos</b> crea un atajo con la acción <b>Abrir URL</b> (el enlace de Enten), toca su nombre → <b>Añadir a pantalla de inicio</b> y elige como imagen este icono: mantenlo pulsado → <b>Guardar en Fotos</b>.</p>' +
