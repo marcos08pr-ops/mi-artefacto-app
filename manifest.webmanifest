@@ -1,0 +1,14 @@
+{
+  "name": "Enten",
+  "short_name": "Enten",
+  "description": "Entreno, nutrición y pasos con un coach que conoce tus datos.",
+  "lang": "es",
+  "start_url": "./Enten.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#08070c",
+  "theme_color": "#08070c",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ]
+}
