@@ -2143,6 +2143,12 @@ function parseHealth(text) {
     const n = Math.min(s.dates.length, s.vals.length);
     for (let i = 0; i < n; i++) put(s.dates[i], s.key, s.vals[i]);
     if (!s.dates.length && !s.pairs.length && s.vals.length === 1) put(today(), s.key, s.vals[0]);
+    // Atajo sin la línea de fechas: con «Agrupar por día» y «Más antiguo primero», el último valor es hoy
+    // y cada uno de los anteriores es un día antes.
+    else if (!s.dates.length && !s.pairs.length && s.vals.length > 1 && s.key !== 'weight') {
+      const n = s.vals.length;
+      s.vals.forEach((v, i) => put(addD(today(), i - (n - 1)), s.key, v));
+    }
   }
   return { days, counts };
 }
