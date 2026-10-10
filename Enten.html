@@ -289,6 +289,13 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:2px 0}
 .hrow > div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .hrow-r{align-items:flex-end;text-align:right}
 .list .list-h + .hrow{border-top:0}
+.mfrow{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px;border-top:1px solid var(--line)}
+.mfrow .hrow{border-top:0}
+.mfrow:first-child{border-top:0}
+.star .ic{width:20px;height:20px}
+.star.on{color:#ffc94d}
+.star.on .ic{fill:currentColor}
+.mfbadge{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3);margin-left:6px}
 
 /* ---------- volumen ---------- */
 .vrows{display:flex;flex-direction:column;gap:12px}
@@ -530,6 +537,7 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--fg-3) 50%),l
 <div id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="fPhoto" class="vh" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
 <input type="file" id="fGallery" class="vh" accept="image/*" multiple tabindex="-1" aria-hidden="true">
+<input type="file" id="fFastic" class="vh" accept="image/*" multiple tabindex="-1" aria-hidden="true">
 <input type="file" id="fJson" class="vh" accept="application/json,.json" tabindex="-1" aria-hidden="true">
 
 <script>
@@ -2419,6 +2427,7 @@ const ICONS = {
   sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M19 16l.7 1.6 1.6.7-1.6.7L19 20.6l-.7-1.6-1.6-.7 1.6-.7Z"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  star: '<path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.6l-5.1 2.7 1-5.7-4.1-4 5.7-.8Z"/>',
   heart: '<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10Z"/>',
 };
 const SIGMA_PATH = 'M292 262H732V354H500L644 512L500 670H732V762H292L520 512Z';
@@ -2544,6 +2553,7 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('change', (e) => {
   const t = e.target;
+  if (t.id === 'fFastic') { const files = Array.from(t.files || []); t.value = ''; if (files.length) importFasticShots(files); return; }
   if (t.id === 'fPhoto' || t.id === 'fGallery') { const files = Array.from(t.files || []); t.value = ''; if (files.length) analyzePhotos(files); return; }
   if (t.id === 'fJson') { const f = t.files && t.files[0]; t.value = ''; if (f) importBackup(f); return; }
   const k = t.dataset && t.dataset.on;
@@ -3256,7 +3266,7 @@ ACT.addFood = (el) => {
     '<button class="method' + (ai ? '' : ' off') + '" data-act="' + (ai ? 'foodDescribe' : 'noAi') + '">' + ic('pencil') + '<b>Describir</b><span>«2 huevos con tostada y aguacate»</span></button>' +
     '<button class="method" data-act="foodSearch">' + ic('search') + '<b>Buscar</b><span>Alimentos y tus comidas</span></button>' +
     '<button class="method" data-act="foodQuick">' + ic('bolt') + '<b>Rápido</b><span>Solo kcal y macros</span></button>' +
-    '<button class="method" data-act="foodRecent">' + ic('list') + '<b>Recientes</b><span>Repite con un toque</span></button></div>', { title: 'Añadir comida' });
+    '<button class="method" data-act="foodRecent">' + ic('star') + '<b>Mis alimentos</b><span>Favoritos, recientes y frecuentes</span></button></div>', { title: 'Añadir comida' });
 };
 ACT.pickMeal = (el) => { UI.addMeal = el.dataset.m; $$('#mealChips .chip').forEach((c) => c.classList.toggle('on', c === el)); };
 ACT.noAi = () => toast(AI_OFF + ' Mientras, usa Buscar o Rápido.');
@@ -3317,7 +3327,7 @@ function showFoodResult(r, src, urls, files) {
     (r.notes ? '<p class="srcnote">' + ic('info', 'sm') + esc(r.notes) + '</p>' : '') +
     '<div class="chips" id="mealChips">' + MEALS.map((m) => '<button class="chip' + (m[0] === UI.addMeal ? ' on' : '') + '" data-act="pickMeal" data-m="' + m[0] + '">' + m[1] + '</button>').join('') + '</div>' +
     (src === 'foto' && files ? '<details class="tview"><summary>' + ic('pencil', 'sm') + 'Corregir y reanalizar</summary><div class="form" style="margin-top:8px"><input id="frNote" type="text" placeholder="Ej.: es pavo, no pollo; ración doble"><button class="btn" data-act="frRetry">Reanalizar con la nota</button></div></details>' : '') +
-    '<label class="field"><span>Guardar como comida frecuente (opcional)</span><input id="frSave" type="text" placeholder="Nombre, p. ej. «Mi desayuno de avena»" maxlength="60"></label>' +
+    '<label class="field"><span>Guardar en favoritos como… (opcional)</span><input id="frSave" type="text" placeholder="Nombre, p. ej. «Mi desayuno de avena»" maxlength="60"></label>' +
     '<button class="btn btn-primary wide" data-act="frAdd">Añadir ' + UI.fr.items.length + ' ' + plural(UI.fr.items.length, 'alimento', 'alimentos') + '</button>', { title: 'Revisa y ajusta', onClose: () => { (urls || []).forEach((u) => URL.revokeObjectURL(u)); } });
 }
 function frItemsHtml() {
@@ -3373,15 +3383,44 @@ ACT.frAdd = () => {
   if (UI.tab !== 'nutricion') go('nutricion'); else render();
   toast(fmt(sum(items, (x) => x.kcal)) + ' kcal añadidas a ' + MEAL_L[UI.addMeal].toLowerCase());
 };
-function myFoods() { return S.myfoods || (S.myfoods = { items: [], recent: [] }); }
+/* Mis alimentos: items = comidas guardadas (varios alimentos), favs = favoritos sueltos,
+   recent = últimos registrados, freq = cuántas veces se ha registrado cada alimento. */
+function myFoods() {
+  const M = S.myfoods || (S.myfoods = {});
+  if (!Array.isArray(M.items)) M.items = [];
+  if (!Array.isArray(M.recent)) M.recent = [];
+  if (!Array.isArray(M.favs)) M.favs = [];
+  if (!M.freq || typeof M.freq !== 'object') M.freq = {};
+  return M;
+}
+const foodItem = (it) => ({ n: it.n, q: it.q, u: it.u || 'g', kcal: it.kcal, p: it.p, c: it.c, f: it.f, fib: it.fib || 0 });
+function isFav(n) { const k = norm(n); return myFoods().favs.some((x) => norm(x.n) === k); }
+function toggleFav(it) {
+  const M = myFoods(), k = norm(it.n);
+  const on = !isFav(it.n);
+  M.favs = M.favs.filter((x) => norm(x.n) !== k);
+  if (on) M.favs.unshift(foodItem(it));
+  M.favs = M.favs.slice(0, 200);
+  Store.save('foods/custom', M);
+  return on;
+}
+function frequentFoods() {
+  const F = myFoods().freq;
+  return Object.keys(F).map((k) => F[k]).filter((x) => x && x.it && x.c >= 2).sort((a, b) => b.c - a.c || b.t - a.t).slice(0, 40);
+}
 function rememberFoods(items, comboName) {
-  const M = myFoods();
+  const M = myFoods(), now = Date.now();
   items.forEach((it) => {
     const key = norm(it.n);
+    if (!key) return;
     M.recent = M.recent.filter((r) => norm(r.n) !== key);
-    M.recent.unshift({ n: it.n, q: it.q, u: it.u || 'g', kcal: it.kcal, p: it.p, c: it.c, f: it.f, fib: it.fib || 0 });
+    M.recent.unshift(foodItem(it));
+    const prev = M.freq[key];
+    M.freq[key] = { it: foodItem(it), c: ((prev && prev.c) || 0) + 1, t: now };
   });
   M.recent = M.recent.slice(0, 40);
+  const keys = Object.keys(M.freq);
+  if (keys.length > 250) keys.sort((a, b) => (M.freq[a].c - M.freq[b].c) || (M.freq[a].t - M.freq[b].t)).slice(0, keys.length - 250).forEach((k) => { delete M.freq[k]; });
   if (comboName) {
     M.items = M.items.filter((x) => norm(x.n) !== norm(comboName));
     M.items.unshift({ n: comboName, combo: items.map((it) => ({ n: it.n, q: it.q, u: it.u || 'g', kcal: it.kcal, p: it.p, c: it.c, f: it.f, fib: it.fib || 0 })) });
@@ -3399,11 +3438,13 @@ ACT.foodSearch = () => {
 function foodResults(q) {
   const n = norm(q), M = myFoods();
   const mine = M.items.filter((x) => !n || norm(x.n).indexOf(n) >= 0).slice(0, 8);
+  const favs = M.favs.filter((x) => n && norm(x.n).indexOf(n) >= 0).slice(0, 8);
   const db = FOODS.filter((f) => !n || f._n.indexOf(n) >= 0).slice(0, n ? 30 : 14);
   let h = '';
   if (mine.length) h += '<p class="list-h">Mis comidas</p>' + mine.map((x) => { const i = M.items.indexOf(x); return '<button class="hrow" data-act="addCombo" data-i="' + i + '"><div><b>' + esc(x.n) + '</b><span class="muted small">' + x.combo.length + ' alimentos · ' + fmt(sum(x.combo, (c) => c.kcal)) + ' kcal</span></div>' + ic('plus') + '</button>'; }).join('');
+  if (favs.length) h += '<p class="list-h">Favoritos</p>' + favs.map((x) => '<button class="hrow" data-act="mfAdd" data-t="fav" data-i="' + M.favs.indexOf(x) + '"><div><b>' + esc(x.n) + '</b><span class="muted small">' + esc(qtyLabel(x)) + ' · ' + fmt(x.kcal) + ' kcal</span></div>' + ic('plus') + '</button>').join('');
   h += '<p class="list-h">Alimentos · por 100 g</p>' + db.map((f) => '<button class="hrow" data-act="foodPick" data-n="' + esc(f.n) + '"><div><b>' + esc(f.n) + '</b><span class="muted small">' + fmt(f.kcal) + ' kcal · P ' + fmt(f.p, 1) + ' · C ' + fmt(f.c, 1) + ' · G ' + fmt(f.f, 1) + '</span></div>' + ic('plus') + '</button>').join('');
-  if (!db.length && !mine.length) h += '<p class="muted">Sin resultados. Prueba Describir con IA o Rápido.</p>';
+  if (!db.length && !mine.length && !favs.length) h += '<p class="muted">Sin resultados. Prueba Describir con IA o Rápido.</p>';
   return h;
 }
 ON.foodQ = (el) => { $('#fsRes').innerHTML = foodResults(el.value); };
@@ -3441,24 +3482,141 @@ ACT.addCombo = (el) => {
   const k = UI.addDate || today(), fd = foodDay(k), now = Date.now();
   x.combo.forEach((c) => fd.entries.push(Object.assign({ id: uid('f'), meal: UI.addMeal, src: 'mio', t: now }, c)));
   saveFood(k);
+  rememberFoods(x.combo);
   closeAllSheets();
   render();
   toast('«' + x.n + '» añadido');
 };
+const MF_TABS = [['fav', 'Favoritos'], ['rec', 'Recientes'], ['freq', 'Frecuentes']];
+function mfSource(tab) {
+  const M = myFoods();
+  if (tab === 'fav') return M.favs;
+  if (tab === 'freq') return frequentFoods().map((x) => Object.assign({ _c: x.c }, x.it));
+  return M.recent;
+}
+function mfRow(it, tab, i) {
+  const fav = isFav(it.n);
+  return '<div class="mfrow"><button class="hrow" data-act="mfAdd" data-t="' + tab + '" data-i="' + i + '"><div><b>' + esc(it.n) + '</b><span class="muted small">' + esc(qtyLabel(it)) + ' · ' + fmt(it.kcal) + ' kcal · P ' + fmt(it.p) + (it._c ? ' · ' + it._c + ' veces' : '') + '</span></div>' + ic('plus') + '</button>' +
+    '<button class="icon-btn star' + (fav ? ' on' : '') + '" data-act="mfStar" data-t="' + tab + '" data-i="' + i + '" aria-pressed="' + fav + '" aria-label="' + (fav ? 'Quitar de favoritos' : 'Añadir a favoritos') + '">' + ic('star') + '</button></div>';
+}
+function mfBody() {
+  const tab = UI.mfTab, M = myFoods();
+  let h = '<div class="seg">' + MF_TABS.map(([k, l]) => '<button class="' + (tab === k ? 'on' : '') + '" data-act="mfTab" data-t="' + k + '">' + l + '</button>').join('') + '</div>';
+  const list = mfSource(tab);
+  if (tab === 'fav' && M.items.length) {
+    h += '<p class="list-h">Comidas guardadas</p><div>' + M.items.map((x, i) => '<div class="mfrow"><button class="hrow" data-act="addCombo" data-i="' + i + '"><div><b>' + esc(x.n) + '</b><span class="muted small">' + x.combo.length + ' alimentos · ' + fmt(sum(x.combo, (c) => c.kcal)) + ' kcal</span></div>' + ic('plus') + '</button>' +
+      '<button class="icon-btn" data-act="mfDelCombo" data-i="' + i + '" aria-label="Borrar ' + esc(x.n) + '">' + ic('trash') + '</button></div>').join('') + '</div>';
+    if (list.length) h += '<p class="list-h">Alimentos</p>';
+  }
+  if (list.length) h += '<div>' + list.map((it, i) => mfRow(it, tab, i)).join('') + '</div>';
+  else if (!(tab === 'fav' && M.items.length)) {
+    h += '<p class="muted">' + (tab === 'fav' ? 'Toca la estrella de cualquier alimento en Recientes o Frecuentes para tenerlo aquí. Al escanear un plato también puedes guardarlo en favoritos con un nombre.'
+      : tab === 'freq' ? 'Lo que registres al menos dos veces aparecerá aquí, ordenado por las veces que lo comes.'
+      : 'Aquí aparecerá lo que vayas registrando para repetirlo con un toque.') + '</p>';
+  }
+  if (tab === 'fav') h += '<button class="btn btn-ghost" data-act="fasticHelp">' + ic('upload') + 'Importar mis favoritos de Fastic</button>';
+  return h;
+}
+function mfRedraw() { const s = UI.mfSheet; if (s && document.body.contains(s.el)) s.set(mfBody()); }
 ACT.foodRecent = () => {
   closeAllSheets();
-  const R = myFoods().recent;
-  sheet(R.length ? R.map((r, i) => '<button class="hrow" data-act="addRecent" data-i="' + i + '"><div><b>' + esc(r.n) + '</b><span class="muted small">' + esc(qtyLabel(r)) + ' · ' + fmt(r.kcal) + ' kcal</span></div>' + ic('plus') + '</button>').join('') : '<p class="muted">Aquí aparecerá lo que vayas registrando para repetirlo con un toque.</p>', { title: 'Recientes' });
+  const M = myFoods();
+  if (!UI.mfTab) UI.mfTab = M.favs.length || M.items.length ? 'fav' : 'rec';
+  UI.mfSheet = sheet(mfBody(), { title: 'Mis alimentos' });
 };
-ACT.addRecent = (el) => {
-  const r = myFoods().recent[+el.dataset.i];
+ACT.mfTab = (el) => { UI.mfTab = el.dataset.t; mfRedraw(); };
+ACT.mfAdd = (el) => {
+  const r = mfSource(el.dataset.t)[+el.dataset.i];
   if (!r) return;
-  const k = UI.addDate || today();
-  foodDay(k).entries.push(Object.assign({ id: uid('f'), meal: UI.addMeal, src: 'mio', t: Date.now() }, r));
+  const it = foodItem(r), k = UI.addDate || today();
+  foodDay(k).entries.push(Object.assign({ id: uid('f'), meal: UI.addMeal, src: 'mio', t: Date.now() }, it));
   saveFood(k);
-  el.querySelector('.ic') && (el.style.opacity = 0.55);
+  rememberFoods([it]);
+  el.style.opacity = 0.55;
   render();
-  toast(r.n + ' añadido');
+  toast(r.n + ' añadido a ' + MEAL_L[UI.addMeal].toLowerCase());
+};
+ACT.mfStar = (el) => {
+  const r = mfSource(el.dataset.t)[+el.dataset.i];
+  if (!r) return;
+  const on = toggleFav(r);
+  mfRedraw();
+  toast(on ? 'Añadido a favoritos' : 'Quitado de favoritos');
+};
+ACT.mfDelCombo = async (el) => {
+  const M = myFoods(), x = M.items[+el.dataset.i];
+  if (!x || !(await confirmBox('¿Quitar «' + x.n + '» de tus comidas guardadas?', { yes: 'Quitar', danger: true }))) return;
+  M.items.splice(M.items.indexOf(x), 1);
+  Store.save('foods/custom', M);
+  ACT.foodRecent();
+};
+
+/* ---------- importar favoritos de Fastic a partir de capturas ---------- */
+ACT.fasticHelp = () => {
+  closeAllSheets();
+  sheet('<p class="fg2">Fastic no permite exportar los favoritos, pero Enten puede leerlos de capturas de pantalla.</p>' +
+    '<ol class="steps-ol"><li>En Fastic, abre la lista de tus <b>favoritos</b>.</li><li>Haz capturas hasta que salgan todos (botón lateral + subir volumen). Si al tocar uno se ven sus macros, una captura de cada uno da cifras más exactas.</li><li>Elige aquí las capturas. La IA lee cada alimento; tú los revisas antes de guardarlos.</li></ol>' +
+    (AI.canImg() ? '<label class="btn btn-primary wide" for="fFastic">' + ic('image') + 'Elegir capturas</label>' : '<p class="err">' + esc(AI_OFF) + '</p>') +
+    '<p class="muted small">Si una captura no muestra proteína, carbohidratos o grasa, la IA los estima para esa cantidad y lo marca como «estimado».</p>', { title: 'Favoritos de Fastic' });
+};
+function fasticPrompt() {
+  return `Estas capturas son de la lista de favoritos (o de la ficha de un alimento) de la app Fastic, en español.
+Extrae cada alimento o comida que se vea, sin repetir y sin inventar ninguno que no aparezca.
+Para cada uno: el nombre tal como aparece; la cantidad de la ración que muestre en gramos (o ml para bebidas; si solo pone «1 ración» o «1 unidad», calcula los gramos habituales en España); las kcal si aparecen; y proteína, carbohidratos, grasa y fibra en gramos si aparecen.
+Si falta algún dato, estímalo para esa cantidad con tablas BEDCA/USDA y pon "estimado": true. Si todo sale de la captura, "estimado": false.
+Responde SOLO con JSON con esta forma (números sin unidades):
+{"items":[{"nombre":"Yogur griego natural","gramos":125,"kcal":150,"proteina":5,"carbohidratos":5,"grasa":12.5,"fibra":0,"estimado":false}]}
+Si no hay alimentos, responde {"items":[]}.`;
+}
+async function importFasticShots(files) {
+  if (!AI.canImg()) { toast(AI_OFF); return; }
+  closeAllSheets();
+  const per = Math.max(1, AI.maxImg()), ctl = new AbortController();
+  const s = sheet('<p class="thinking"><i class="spin"></i><span id="fxSt">Leyendo ' + files.length + ' ' + plural(files.length, 'captura', 'capturas') + '…</span></p><button class="btn" data-act="sheetClose">Cancelar</button>', { title: 'Favoritos de Fastic', onClose: () => ctl.abort() });
+  const found = [], seen = {};
+  try {
+    for (let i = 0; i < files.length; i += per) {
+      const st = $('#fxSt');
+      if (st) st.textContent = 'Leyendo capturas ' + (i + 1) + '–' + Math.min(files.length, i + per) + ' de ' + files.length + '…';
+      const j = await AI.json(fasticPrompt(), { images: files.slice(i, i + per), signal: ctl.signal, modelTier: 'default', cache: false });
+      (j && Array.isArray(j.items) ? j.items : []).forEach((x) => {
+        const n = String(x.nombre || '').trim().slice(0, 80), k = norm(n);
+        if (!k || seen[k]) return;
+        seen[k] = true;
+        found.push({ n, q: Math.max(0, rnd(num(x.gramos, 100))), u: 'g', kcal: Math.max(0, rnd(num(x.kcal, 0))), p: Math.max(0, rnd(num(x.proteina, 0), 1)), c: Math.max(0, rnd(num(x.carbohidratos, 0), 1)), f: Math.max(0, rnd(num(x.grasa, 0), 1)), fib: Math.max(0, rnd(num(x.fibra, 0), 1)), est: !!x.estimado });
+      });
+    }
+  } catch (e) {
+    if (e && e.code === 'cancelled') return;
+    if (!found.length) { s.set('<p class="err">' + esc(AI.msg(e)) + '</p><button class="btn btn-primary" data-act="sheetClose">Cerrar</button>'); return; }
+  }
+  s.onClose = null;
+  s.close();
+  const fresh = found.filter((x) => x.kcal > 0 && !isFav(x.n));
+  if (!fresh.length) { toast(found.length ? 'Esos alimentos ya estaban en tus favoritos' : 'No he encontrado alimentos en las capturas'); return; }
+  UI.fx = fresh;
+  sheet('<p class="muted">Revisa la lista y quita lo que no quieras. Podrás cambiar la cantidad cada vez que lo añadas.</p><div id="fxList">' + fxListHtml() + '</div>' +
+    '<button class="btn btn-primary wide" data-act="fxSave" id="fxBtn">Guardar ' + fresh.length + ' en favoritos</button>', { title: 'Encontrados en Fastic' });
+}
+function fxListHtml() {
+  return UI.fx.map((x, i) => '<div class="mfrow"><div class="hrow"><div><b>' + esc(x.n) + (x.est ? '<span class="mfbadge">estimado</span>' : '') + '</b><span class="muted small">' + esc(qtyLabel(x)) + ' · ' + fmt(x.kcal) + ' kcal · P ' + fmt(x.p, 1) + ' · C ' + fmt(x.c, 1) + ' · G ' + fmt(x.f, 1) + '</span></div></div>' +
+    '<button class="icon-btn" data-act="fxDel" data-i="' + i + '" aria-label="Quitar ' + esc(x.n) + '">' + ic('x') + '</button></div>').join('');
+}
+ACT.fxDel = (el) => {
+  UI.fx.splice(+el.dataset.i, 1);
+  if (!UI.fx.length) { closeAllSheets(); return; }
+  $('#fxList').innerHTML = fxListHtml();
+  $('#fxBtn').textContent = 'Guardar ' + UI.fx.length + ' en favoritos';
+};
+ACT.fxSave = () => {
+  const M = myFoods(), n = UI.fx.length;
+  UI.fx.slice().reverse().forEach((x) => { if (!isFav(x.n)) M.favs.unshift(foodItem(x)); });
+  M.favs = M.favs.slice(0, 200);
+  Store.save('foods/custom', M);
+  UI.fx = null;
+  UI.mfTab = 'fav';
+  ACT.foodRecent();
+  toast(n + ' ' + plural(n, 'favorito importado', 'favoritos importados'));
 };
 ACT.foodQuick = () => {
   closeAllSheets();
@@ -3472,8 +3630,11 @@ ACT.quickAdd = () => {
   const kcal = Math.round(v('qkK') || v('qkP') * 4 + v('qkC') * 4 + v('qkF') * 9);
   if (!kcal) { toast('Escribe al menos las kcal'); return; }
   const k = UI.addDate || today();
-  foodDay(k).entries.push({ id: uid('f'), meal: UI.addMeal, n: (($('#qkN') || {}).value || '').trim() || 'Añadido rápido', q: 1, u: 'ud', kcal, p: v('qkP'), c: v('qkC'), f: v('qkF'), fib: 0, src: 'rapido', t: Date.now() });
+  const name = (($('#qkN') || {}).value || '').trim();
+  const e = { id: uid('f'), meal: UI.addMeal, n: name || 'Añadido rápido', q: 1, u: 'ud', kcal, p: v('qkP'), c: v('qkC'), f: v('qkF'), fib: 0, src: 'rapido', t: Date.now() };
+  foodDay(k).entries.push(e);
   saveFood(k);
+  if (name) rememberFoods([e]);
   closeAllSheets();
   render();
   toast(kcal + ' kcal añadidas');
@@ -3485,7 +3646,16 @@ ACT.editFood = (el) => {
   UI.addMeal = e.meal;
   sheet('<label class="field"><span>Cantidad (' + esc(e.u || 'g') + ')</span><input id="efQ" type="text" inputmode="decimal" value="' + fmt(e.q, 1) + '" data-in="efQty"></label><div class="totbar" id="efTot">' + efTot(e.q) + '</div>' +
     '<div class="chips" id="mealChips">' + MEALS.map((m) => '<button class="chip' + (m[0] === e.meal ? ' on' : '') + '" data-act="pickMeal" data-m="' + m[0] + '">' + m[1] + '</button>').join('') + '</div>' +
+    '<button class="btn btn-ghost star' + (isFav(e.n) ? ' on' : '') + '" data-act="efFav">' + ic('star') + (isFav(e.n) ? 'En favoritos' : 'Añadir a favoritos') + '</button>' +
     '<div class="btn-row"><button class="btn btn-danger" data-act="delFood">' + ic('trash') + 'Borrar</button><button class="btn btn-primary" data-act="saveFoodEdit">Guardar</button></div>', { title: e.n });
+};
+ACT.efFav = (el) => {
+  const fd = S.food[UI.ef.k], e = fd && fd.entries.find((x) => x.id === UI.ef.id);
+  if (!e) return;
+  const on = toggleFav(e);
+  el.classList.toggle('on', on);
+  el.innerHTML = ic('star') + (on ? 'En favoritos' : 'Añadir a favoritos');
+  toast(on ? 'Añadido a favoritos' : 'Quitado de favoritos');
 };
 function efCalc(q) { const b = UI.ef.base, f = b.q ? q / b.q : 0; return { kcal: rnd(b.kcal * f), p: rnd(b.p * f, 1), c: rnd(b.c * f, 1), f: rnd(b.f * f, 1), fib: rnd(b.fib * f, 1) }; }
 function efTot(q) { const m = efCalc(q); return '<span>Total</span><span><b>' + fmt(m.kcal) + '</b> kcal · P ' + fmt(m.p) + ' · C ' + fmt(m.c) + ' · G ' + fmt(m.f) + '</span>'; }
@@ -4468,7 +4638,7 @@ async function loadAll() {
   S.live = v[3] && Array.isArray(v[3].ex) ? v[3] : null;
   S.fasting = v[4];
   S.chat = v[5] && Array.isArray(v[5].messages) ? v[5] : null;
-  S.myfoods = v[6] && Array.isArray(v[6].items) ? v[6] : null;
+  S.myfoods = v[6] && typeof v[6] === 'object' ? v[6] : null;
   const from = addD(today(), -130);
   const r = await Promise.all([
     Store.list('sessions', { orderBy: 'date', dir: 'desc', limit: 800 }),
