@@ -2068,10 +2068,24 @@ function dayTotals(k) {
   if (h && h.water && h.water > t.water) t.water = h.water;
   return t;
 }
+/* Calorías quemadas en un día = metabolismo basal + actividad.
+   Hoy el basal cuenta solo hasta la hora actual, como en Apple Salud.
+   Actividad: la energía activa de Salud si se ha sincronizado; si no, se estima con los pasos
+   (~0,0005 kcal por paso y kg) y los entrenos registrados (MET neto ~3,5 en pesas). */
 function burned(k) {
-  const T = targets(), h = hday(k);
-  if (h && h.active) return { total: Math.round(T.bmr + h.active), bmr: T.bmr, active: Math.round(h.active), est: false };
-  return { total: T.tdee, bmr: T.bmr, active: T.tdee - T.bmr, est: true };
+  const T = targets(), h = hday(k) || {}, t = today();
+  const now = new Date(), frac = k > t ? 0 : k < t ? 1 : (now.getHours() * 60 + now.getMinutes()) / 1440;
+  const bmr = Math.round(T.bmr * frac), partial = frac < 1;
+  if (h.active) return { total: bmr + Math.round(h.active), bmr, active: Math.round(h.active), est: false, partial, src: 'salud' };
+  const steps = Math.round((h.steps || 0) * 0.0005 * T.w);
+  const gym = Math.round(sum(idx().byDate[k] || [], (s) => 3.5 * T.w * (s.dur || 0) / 60));
+  return { total: bmr + steps + gym, bmr, active: steps + gym, steps, gym, est: true, partial, src: h.steps || gym ? 'pasos' : 'basal' };
+}
+function burnedNote(b) {
+  const base = 'metabolismo basal (' + fmt(b.bmr) + (b.partial ? ' hasta ahora' : '') + ')';
+  if (b.src === 'salud') return 'Quemado = ' + base + ' + energía activa de Apple Salud (' + fmt(b.active) + ').';
+  if (b.src === 'pasos') return 'Quemado = ' + base + ' + pasos (' + fmt(b.steps) + ')' + (b.gym ? ' + entreno (' + fmt(b.gym) + ')' : '') + ', estimado. Para la cifra exacta, añade «Energía activa» al atajo de Salud.';
+  return 'Quemado = ' + base + '. Sincroniza tus pasos o la energía activa de Salud para sumar tu actividad.';
 }
 function nutriAvg(days) {
   const t = today(), rows = [];
@@ -2707,10 +2721,10 @@ function energyCard(k, link) {
   return '<section class="card"><div class="card-h"><h3>Energía</h3>' + (link ? '<button class="link" data-act="go" data-tab="nutricion">Diario' + ic('right') + '</button>' : '<span class="muted small">' + srcLabel(tot.src) + '</span>') + '</div>' +
     '<div class="rings">' +
     ringStat({ svg: ring({ v: tot.kcal, max: T.kcal, cls: tot.kcal > T.kcal * 1.05 ? 'r-over' : '' }), val: fmt(tot.kcal), sub: 'de ' + fmt(T.kcal), lbl: 'Consumido' }) +
-    ringStat({ svg: ring2(b.bmr, Math.max(0, b.active)), val: fmt(b.total), sub: b.est ? 'estimado' : 'kcal', lbl: 'Quemado' }) +
+    ringStat({ svg: ring2(b.bmr, Math.max(0, b.active)), val: fmt(b.total), sub: b.partial ? 'hasta ahora' : b.est ? 'estimado' : 'kcal', lbl: 'Quemado' }) +
     ringStat({ svg: ring({ v: Math.max(0, rem), max: T.kcal, cls: rem < 0 ? 'r-over' : 'r-soft' }), val: fmt(Math.abs(rem)), sub: 'kcal', lbl: rem < 0 ? 'Te pasas' : 'Restante' }) +
     '</div><div class="macros">' + macroRow('Proteína', tot.p, T.p, 'prot') + macroRow('Carbohidratos', tot.c, T.c, 'carb') + macroRow('Grasa', tot.f, T.f, 'fat') + (link ? '' : macroRow('Fibra', tot.fib, T.fib, 'fib')) + '</div>' +
-    (link ? '' : '<p class="srcnote">' + ic('info', 'sm') + 'Quemado = metabolismo basal (' + fmt(b.bmr) + ') + actividad (' + fmt(Math.max(0, b.active)) + ')' + (b.est ? ', estimada hasta que sincronices con Salud.' : ' de Apple Salud.') + '</p>') +
+    (link ? '' : '<p class="srcnote">' + ic('info', 'sm') + esc(burnedNote(b)) + '</p>') +
     '</section>';
 }
 function stepsCard(k) {
