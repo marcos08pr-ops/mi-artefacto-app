@@ -2146,7 +2146,8 @@ function parseNum(str, key) {
   const v = parseFloat(cands[0]);
   return Number.isFinite(v) ? v : null;
 }
-function parseHealth(text) {
+function parseHealth(text, refDay) {
+  const ref = refDay || today();
   const days = {}, counts = {};
   const put = (k, key, v) => {
     if (!k || v == null || !Number.isFinite(v)) return;
@@ -2177,12 +2178,12 @@ function parseHealth(text) {
     s.pairs.forEach((p) => put(p[0], s.key, p[1]));
     const n = Math.min(s.dates.length, s.vals.length);
     for (let i = 0; i < n; i++) put(s.dates[i], s.key, s.vals[i]);
-    if (!s.dates.length && !s.pairs.length && s.vals.length === 1) put(today(), s.key, s.vals[0]);
+    if (!s.dates.length && !s.pairs.length && s.vals.length === 1) put(ref, s.key, s.vals[0]);
     // Atajo sin la línea de fechas: con «Agrupar por día» y «Más antiguo primero», el último valor es hoy
     // y cada uno de los anteriores es un día antes.
     else if (!s.dates.length && !s.pairs.length && s.vals.length > 1 && s.key !== 'weight') {
       const n = s.vals.length;
-      s.vals.forEach((v, i) => put(addD(today(), i - (n - 1)), s.key, v));
+      s.vals.forEach((v, i) => put(addD(ref, i - (n - 1)), s.key, v));
     }
   }
   return { days, counts };
@@ -4024,6 +4025,107 @@ function strengthBlock() {
     }).join('') + '</section>';
 }
 
+/* ---------- sincronización automática ----------
+   El atajo «Enten Salud» deja el texto en una nota privada (gist secreto) de GitHub y Enten la lee solo:
+   al abrirse, al volver a primer plano y cada 5 minutos mientras está abierto.
+   Solo fuera de Claude: dentro, la página no puede conectarse a otros servidores. */
+const AUTO_LS = 'enten1:autoSync', AUTO_FILE = 'enten-salud.txt';
+const Auto = {
+  busy: false,
+  cfg() { try { return JSON.parse(localStorage.getItem(AUTO_LS) || 'null') || {}; } catch (e) { return {}; } },
+  save(c) { try { localStorage.setItem(AUTO_LS, JSON.stringify(c)); } catch (e) {} },
+  on() { const c = this.cfg(); return !AI.inClaude() && !!(c.token && c.gist); },
+  url(id) { return 'https://api.github.com/gists/' + (id || this.cfg().gist); },
+  async api(url, token, opt) {
+    const r = await fetch(url, Object.assign({ cache: 'no-store', headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' } }, opt || {}));
+    if (!r.ok) throw { status: r.status };
+    return r.json();
+  },
+  errText(e) {
+    if (e && e.status === 401) return 'La clave de GitHub no es válida o ha caducado.';
+    if (e && (e.status === 403 || e.status === 404)) return 'No encuentro la nota: revisa que la clave tenga el permiso «Gists».';
+    return 'Sin conexión con GitHub.';
+  },
+  async create(token) {
+    const g = await this.api('https://api.github.com/gists', token, { method: 'POST', body: JSON.stringify({ description: 'Enten · datos de Apple Salud', public: false, files: { [AUTO_FILE]: { content: 'ENTEN\n' } } }) });
+    return g.id;
+  },
+  async pull(manual) {
+    if (!this.on() || this.busy || !S.loaded) return;
+    this.busy = true;
+    const c = this.cfg();
+    try {
+      const g = await this.api(this.url(), c.token);
+      const f = g.files && g.files[AUTO_FILE];
+      let txt = (f && f.content) || '';
+      if (f && f.truncated && f.raw_url) txt = await (await fetch(f.raw_url, { cache: 'no-store' })).text();
+      c.last = Date.now(); c.err = '';
+      const fresh = g.updated_at !== c.seen;
+      c.seen = g.updated_at;
+      this.save(c);
+      if (!fresh && !manual) return;
+      const r = parseHealth(txt, dk(new Date(g.updated_at)));
+      if (!Object.keys(r.days).length) { if (manual) toast('La nota aún no tiene datos: ejecuta el atajo «Enten Salud».'); return; }
+      mergeHealth(r.days);
+      if (!SHEETS.length && !(S.live && !$('#workout').hidden)) render();
+      const h = hday(today());
+      toast('Salud actualizada a las ' + hm(new Date(g.updated_at).getTime()) + (h && h.steps != null ? ' · hoy ' + fmt(h.steps) + ' pasos' : ''));
+    } catch (e) {
+      c.err = this.errText(e); this.save(c);
+      if (manual) toast(c.err);
+    } finally { this.busy = false; }
+  },
+};
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Auto.pull(); });
+setInterval(() => { if (document.visibilityState === 'visible') Auto.pull(); }, 5 * 60000);
+
+function autoSection() {
+  if (AI.inClaude()) return '';
+  const c = Auto.cfg(), on = Auto.on();
+  const sub = on ? (c.err ? c.err : c.seen ? 'Últimos datos del atajo: ' + relD(dk(new Date(c.seen))).toLowerCase() + ' a las ' + hm(new Date(c.seen).getTime()) : 'Conectada. Esperando a que el atajo envíe datos.') : 'El atajo deja tus datos en una nota privada de GitHub y Enten los lee solo.';
+  return '<section class="card"><p class="eyebrow">Salud automática</p><div class="setrow"><div><b>' + (on ? 'Activada' : 'Desactivada') + '</b><span class="muted small' + (on && c.err ? ' err' : '') + '">' + esc(sub) + '</span></div><button class="btn btn-sm" data-act="autoSheet">' + (on ? 'Ver' : 'Configurar') + '</button></div></section>';
+}
+ACT.autoSheet = () => {
+  closeAllSheets();
+  const c = Auto.cfg();
+  if (Auto.on()) {
+    sheet('<p class="fg2">Enten lee tus datos de Salud al abrirse y cada 5 minutos mientras está abierto.</p>' +
+      '<div class="field"><span>Dirección para el atajo (acción «Obtener contenido de URL»)</span><div class="code">' + esc(Auto.url()) + '</div><button class="btn btn-sm" data-act="autoCopy" data-v="' + esc(Auto.url()) + '">' + ic('copy') + 'Copiar dirección</button></div>' +
+      '<div class="field"><span>Clave para la cabecera Authorization del atajo</span><div class="code">Bearer ' + esc(c.token.slice(0, 12)) + '…</div><button class="btn btn-sm" data-act="autoCopy" data-v="' + esc('Bearer ' + c.token) + '">' + ic('copy') + 'Copiar «Bearer …»</button></div>' +
+      (c.err ? '<p class="err">' + esc(c.err) + '</p>' : '') +
+      '<div class="btn-row"><button class="btn" data-act="autoNow">' + ic('sync') + 'Comprobar ahora</button><button class="btn btn-danger" data-act="autoOff">Desconectar</button></div>', { title: 'Salud automática' });
+    return;
+  }
+  sheet('<p class="fg2">Pega la clave de GitHub que has creado (empieza por <b>github_pat_</b> o <b>ghp_</b>, con el permiso «Gists»). Enten crea la nota privada y te da la dirección para el atajo.</p>' +
+    '<form class="form" data-submit="autoConnect"><label class="field"><span>Clave de GitHub</span><input id="autoTok" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…"></label>' +
+    '<label class="field"><span>Código de una nota que ya tengas (opcional)</span><input id="autoGist" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Déjalo vacío la primera vez"></label>' +
+    '<p class="muted small">La clave se guarda solo en este iPhone y solo se envía a api.github.com.</p>' +
+    '<button class="btn btn-primary wide" type="submit">Conectar</button></form>', { title: 'Salud automática' });
+};
+ACT.autoConnect = async () => {
+  const token = (($('#autoTok') || {}).value || '').trim();
+  let gist = (($('#autoGist') || {}).value || '').trim().replace(/^.*\//, '');
+  if (!/^(github_pat_|ghp_)/.test(token)) { toast('La clave empieza por github_pat_ o ghp_'); return; }
+  try {
+    if (gist) await Auto.api(Auto.url(gist), token);
+    else gist = await Auto.create(token);
+  } catch (e) { toast(Auto.errText(e)); return; }
+  Auto.save({ token, gist });
+  ACT.autoSheet();
+  toast('Conectado. Ahora copia la dirección y la clave en el atajo.');
+};
+ACT.autoCopy = (el) => {
+  const v = el.dataset.v;
+  try { navigator.clipboard.writeText(v).then(() => toast('Copiado'), () => toast('Mantén pulsado el texto para copiarlo')); } catch (e) { toast('Mantén pulsado el texto para copiarlo'); }
+};
+ACT.autoNow = () => Auto.pull(true);
+ACT.autoOff = async () => {
+  if (!(await confirmBox('¿Desconectar la sincronización automática?', { yes: 'Desconectar', danger: true, detail: 'Tus datos ya importados se quedan. La nota de GitHub no se borra.' }))) return;
+  Auto.save({});
+  closeAllSheets();
+  toast('Sincronización automática desconectada');
+};
+
 /* ---------- sincronización con Apple Salud mediante Atajos ---------- */
 const SHORTCUT_TEXT = 'ENTEN\n#pasos\n[Pasos · Fecha de inicio]\n[Pasos · Valor]\n#activa\n[Energía activa · Fecha de inicio]\n[Energía activa · Valor]\n#dieta\n[Energía alimentaria · Fecha de inicio]\n[Energía alimentaria · Valor]\n#peso\n[Peso · Fecha de inicio]\n[Peso · Valor]\n#distancia\n[Distancia · Fecha de inicio]\n[Distancia · Valor]\n#agua\n[Agua · Fecha de inicio]\n[Agua · Valor]\n#proteina\n[Proteínas · Fecha de inicio]\n[Proteínas · Valor]';
 ACT.openSync = () => {
@@ -4236,6 +4338,7 @@ ACT.openSettings = () => {
     '<div class="setrow"><div><b>Calorías del día</b><span class="muted small">Si registras en Fastic y en Enten</span></div><select data-on="setKcalSrc" aria-label="Fuente de calorías"><option value="auto"' + (st.kcalSource === 'auto' ? ' selected' : '') + '>Enten; si está vacío, Salud</option><option value="enten"' + (st.kcalSource === 'enten' ? ' selected' : '') + '>Solo Enten</option><option value="salud"' + (st.kcalSource === 'salud' ? ' selected' : '') + '>Solo Salud (Fastic)</option></select></div>' +
     '<div class="setrow"><div><b>Apple Salud, Fastic y StepsApp</b><span class="muted small">' + (st.lastSync ? 'Última vez: ' + esc(relD(dk(new Date(st.lastSync))).toLowerCase()) + ' ' + hm(st.lastSync) : 'Sin sincronizar') + '</span></div><button class="btn btn-sm" data-act="openSync">' + ic('sync') + 'Abrir</button></div></section>' +
     (AI.inClaude() ? '' : '<section class="card"><p class="eyebrow">IA sin Claude</p><div class="setrow"><div><b>Clave de la API de Anthropic</b><span class="muted small">' + (AI.getKey() ? 'Guardada en este navegador · ' + esc(AI.getKey().slice(0, 10)) + '…' : 'Sin clave: el coach y el escáner están desactivados') + '</span></div><button class="btn btn-sm" data-act="apiKeySheet">' + (AI.getKey() ? 'Cambiar' : 'Añadir') + '</button></div></section>') +
+    autoSection() +
     '<section class="card"><p class="eyebrow">Tu iPhone</p><div class="setrow"><div><b>Enten en la pantalla de inicio</b><span class="muted small">Con el icono Σ</span></div><button class="btn btn-sm" data-act="homeScreen">Cómo</button></div></section>' +
     '<section class="card"><p class="eyebrow">Datos</p><div class="setrow"><div><b>Almacenamiento</b><span class="muted small">' + esc(mode) + '</span></div></div>' +
     '<div class="setrow"><div><b>IA</b><span class="muted small">' + (AI.ok() ? (AI.mode === 'api' ? 'Activa (tu clave de API)' : 'Activa (Claude)') + (AI.canImg() ? ' · fotos' : '') : AI.state === 'denied' ? 'Sin permiso en esta vista' : 'Desactivada: dentro de Claude o con tu clave de API en Claude') + '</span></div></div>' +
@@ -4894,6 +4997,7 @@ async function boot(hot) {
   if (hot && hot.seg) UI.seg = hot.seg;
   render();
   if (S.live && hot && hot.wk) openWorkout();
+  Auto.pull();
   if (Store.inClaude && !Store.owner) toast('Estás viendo la app de otra persona: tus datos se guardan solo en este navegador.', { ms: 6000 });
   setInterval(() => {
     const typing = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
