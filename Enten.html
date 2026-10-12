@@ -2650,7 +2650,7 @@ VIEWS.hoy = function () {
   return '<section class="hello"><p class="eyebrow">' + esc(cap(fmtD(t, 'long'))) + '</p><h1>' + greet() + first + '</h1></section>' +
     (S.profile ? '' : '<section class="card"><div class="card-h"><div><h3>Completa tu perfil</h3><span class="muted small">Sin tu objetivo y tus datos, las calorías y los consejos son genéricos.</span></div><button class="btn btn-sm btn-primary" data-act="editProfile">Completar</button></div></section>') +
     workoutHero() + weekStrip() + energyCard(t, true) +
-    '<div class="grid2">' + stepsCard(t) + waterCard(t, true) + '</div>' +
+    '<div class="grid2">' + stepsCard(t) + waterCard(t, true) + '</div>' + syncChip() +
     '<div class="grid2">' + fastMini() + weightMini() + '</div>' +
     insightsBlock(4);
 };
@@ -2730,7 +2730,11 @@ function energyCard(k, link) {
 function stepsCard(k) {
   const h = hday(k) || {}, g = S.settings.stepGoal, v = h.steps || 0;
   return '<button class="card mini" data-act="openSteps" aria-label="Pasos"><div class="mini-h">' + ic('steps') + '<span>Pasos</span></div><div class="mini-row">' + ring({ v, max: g, size: 54, sw: 6, cls: v >= g ? 'r-good' : '' }) +
-    '<div><div class="mini-v">' + (v ? fmt(v) : '—') + '</div><div class="mini-u">de ' + fmt(g) + '</div></div></div><p class="mini-s">' + (h.dist ? fmt(h.dist, 1) + ' km' : '') + (h.dist && h.active ? ' · ' : '') + (h.active ? fmt(h.active) + ' kcal' : '') + (!v ? 'Toca para sincronizar' : '') + '</p></button>';
+    '<div><div class="mini-v">' + (v ? fmt(v) : '—') + '</div><div class="mini-u">de ' + fmt(g) + '</div></div></div><p class="mini-s">' + (h.dist ? fmt(h.dist, 1) + ' km' : '') + (h.dist && h.active ? ' · ' : '') + (h.active ? fmt(h.active) + ' kcal' : '') + (!v ? 'Toca para ver o apuntar' : '') + '</p></button>';
+}
+function syncChip() {
+  const ls = S.settings.lastSync;
+  return '<button class="btn btn-sm wide" data-act="quickSync">' + ic('sync') + 'Sincronizar Salud' + (ls ? ' · ' + esc(relD(dk(new Date(ls))).toLowerCase()) + ' ' + hm(ls) : '') + '</button>';
 }
 function waterCard(k, mini) {
   const T = targets(), tot = dayTotals(k), v = tot.water;
@@ -2793,7 +2797,7 @@ ACT.openSteps = () => {
   sheet('<p class="muted">Los pasos llegan desde Apple Salud (la misma fuente que usan StepsApp y Fastic). Sincroniza con el atajo o apúntalos a mano.</p>' +
     '<form class="form" data-submit="saveSteps"><div class="form-2"><label class="field"><span>Pasos de hoy</span><input id="stIn" type="text" inputmode="numeric" value="' + (h.steps || '') + '" placeholder="8.500"></label>' +
     '<label class="field"><span>Objetivo diario</span><input id="stGoal" type="text" inputmode="numeric" value="' + S.settings.stepGoal + '"></label></div>' +
-    '<div class="btn-row"><button class="btn" type="button" data-act="openSync">' + ic('sync') + 'Sincronizar</button><button class="btn btn-primary" type="submit">Guardar</button></div></form>' + stepsBlock(30, true), { title: 'Pasos' });
+    '<div class="btn-row"><button class="btn" type="button" data-act="quickSync">' + ic('sync') + 'Sincronizar</button><button class="btn btn-primary" type="submit">Guardar</button></div></form>' + stepsBlock(30, true), { title: 'Pasos' });
 };
 ACT.saveSteps = () => {
   const v = Math.round(num(String(($('#stIn') || {}).value || '').replace(/\./g, ''), -1));
@@ -3948,7 +3952,8 @@ function syncCard() {
   const ls = S.settings.lastSync;
   return '<section class="card"><div class="card-h"><div><p class="eyebrow">Apple Salud · Fastic · StepsApp</p><h3>' + (ls ? 'Última sincronización: ' + esc(relD(dk(new Date(ls))).toLowerCase()) + ' a las ' + hm(ls) : 'Conecta tus apps') + '</h3></div></div>' +
     '<p class="muted small">Pasos, distancia, kcal activas, peso, agua y, si Fastic las guarda en Salud, las calorías que comes.</p>' +
-    '<div class="btn-row"><button class="btn btn-primary" data-act="openSync">' + ic('sync') + (ls ? 'Sincronizar ahora' : 'Configurar') + '</button></div></section>';
+    '<div class="btn-row"><button class="btn btn-primary" data-act="quickSync">' + ic('sync') + 'Sincronizar ahora</button><button class="btn btn-ghost" data-act="openSync">Configurar</button></div>' +
+    '<p class="muted small">Ejecuta el atajo «Enten Salud» y toca Sincronizar ahora; el iPhone te pedirá confirmar con «Pegar».</p></section>';
 }
 function weightBlock(R, compact) {
   const pts = weightSeries(R), avgPts = movingAvg(pts, 7), wt = weightTrend(), P = S.profile || {};
@@ -4047,15 +4052,29 @@ ON.hsPreview = (el) => {
   $('#hsBtn').disabled = !keys.length;
   UI.hs = r;
 };
-ACT.importHealth = () => {
-  const r = UI.hs;
-  if (!r || !Object.keys(r.days).length) return;
+function applyHealth(r) {
   mergeHealth(r.days);
   const last = Object.keys(r.days).sort().pop(), w = last && r.days[last].weight;
   if (w && S.profile) { S.profile.weight = w; saveProfile(); }
   closeAllSheets();
   render();
-  toast('Importados ' + Object.keys(r.days).length + ' días desde Salud');
+  const h = hday(today());
+  toast('Sincronizado: ' + Object.keys(r.days).length + ' días' + (h && h.steps != null ? ' · hoy ' + fmt(h.steps) + ' pasos' : ''));
+}
+ACT.importHealth = () => {
+  const r = UI.hs;
+  if (!r || !Object.keys(r.days).length) return;
+  applyHealth(r);
+};
+/* Un toque: lee lo que copió el atajo «Enten Salud» (el iPhone pide confirmar con «Pegar»).
+   Si el portapapeles no tiene datos de Enten o el navegador no deja leerlo, abre la guía. */
+ACT.quickSync = async () => {
+  let txt = '';
+  try { if (navigator.clipboard && navigator.clipboard.readText) txt = await navigator.clipboard.readText(); } catch (e) { txt = ''; }
+  const r = /#\s*[a-z]/i.test(txt) ? parseHealth(txt) : null;
+  if (r && Object.keys(r.days).length) { applyHealth(r); return; }
+  ACT.openSync();
+  toast(txt ? 'Lo copiado no son datos de Salud. Ejecuta antes el atajo «Enten Salud».' : 'Ejecuta el atajo «Enten Salud» y vuelve a tocar Sincronizar.');
 };
 
 // ---- 11-coach.js ----
