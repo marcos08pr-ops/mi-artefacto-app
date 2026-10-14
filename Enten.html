@@ -3284,7 +3284,8 @@ function mealBlock(k, m, l) {
   if (t.src === 'salud' && m !== 'desayuno') return '';
   if (t.src === 'salud') return '<section class="card"><div class="card-h"><h3>Desde Apple Salud</h3><span class="muted">' + fmt(t.kcal) + ' kcal</span></div><p class="muted small">Este día no hay comidas en Enten, así que uso lo que Fastic u otra app guardó en Salud: P ' + fmt(t.p) + ' g · C ' + fmt(t.c) + ' g · G ' + fmt(t.f) + ' g.</p><button class="add-line" data-act="addFood" data-meal="desayuno">' + ic('plus') + 'Registrar en Enten</button></section>';
   const kc = sum(en, (e) => e.kcal);
-  return '<section class="card meal"><div class="card-h"><h3>' + l + '</h3><span class="muted num">' + (en.length ? fmt(kc) + ' kcal' : '') + '</span></div>' +
+  const tot = en.length ? '<b class="fg2">' + fmt(kc) + ' kcal</b> · P ' + fmt(sum(en, (e) => e.p)) + ' · C ' + fmt(sum(en, (e) => e.c)) + ' · G ' + fmt(sum(en, (e) => e.f)) : '';
+  return '<section class="card meal"><div class="card-h"><h3>' + l + '</h3><span class="muted small num">' + tot + '</span></div>' +
     en.map((e) => '<button class="frow" data-act="editFood" data-id="' + e.id + '" data-date="' + k + '"><div class="frow-l"><b>' + esc(e.n) + '</b><span class="muted small">' + esc(qtyLabel(e)) + srcTag(e.src) + '</span></div><div class="frow-r"><b class="num">' + fmt(e.kcal) + '</b><span class="muted small num">P ' + fmt(e.p) + ' · C ' + fmt(e.c) + ' · G ' + fmt(e.f) + '</span></div></button>').join('') +
     '<button class="add-line" data-act="addFood" data-meal="' + m + '">' + ic('plus') + 'Añadir a ' + l.toLowerCase() + '</button></section>';
 }
