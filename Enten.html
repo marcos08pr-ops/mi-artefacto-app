@@ -4828,9 +4828,9 @@ function saveRep(r) {
   s.r = r; s.done = true; s.t = Date.now();
   for (let k = R.j + 1; k < e.sets.length; k++) if (!e.sets[k].done) e.sets[k].w = s.w;
   R.sh.close();
-  // En unilaterales no hay descanso entre el lado izquierdo y el derecho de la misma serie.
-  if (!was && S.settings.autoRest && e.type !== 'cardio' && s.side !== 'I' && !isLastSet(R.i, R.j)) {
-    const sec = +e.rest || S.settings.restSec;
+  // Unilaterales: 1:15 entre el lado izquierdo y el derecho, y 2:30 entre una serie y la siguiente.
+  if (!was && S.settings.autoRest && e.type !== 'cardio' && !isLastSet(R.i, R.j)) {
+    const sec = s.side === 'I' ? 75 : s.side === 'D' ? 150 : +e.rest || S.settings.restSec;
     L.rest = { until: Date.now() + sec * 1000, total: sec };
   }
   saveLive();
