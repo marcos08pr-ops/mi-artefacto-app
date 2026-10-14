@@ -458,7 +458,8 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--fg-3) 50%),l
 .sets{display:flex;flex-direction:column;gap:6px}
 .set-h,.set{display:grid;grid-template-columns:44px 1fr 1fr 34px;gap:8px;align-items:center}
 .set-h{font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-3);padding:0 4px}
-.set-n{font-weight:700;color:var(--fg-3);text-align:center;font-variant-numeric:tabular-nums}
+.set.side-d{margin-top:-2px}
+.set-n{font-size:12.5px;font-weight:700;color:var(--fg-3);text-align:center;font-variant-numeric:tabular-nums}
 .set-w,.set-r{min-height:48px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:4px;font-size:17px;font-weight:680;font-variant-numeric:tabular-nums}
 .set-w small{font-size:12px;color:var(--fg-3);font-weight:600}
 .set-r{border-color:var(--line-2)}
@@ -772,6 +773,8 @@ const EX = [
   ['remo_ergometro', 'Remo ergómetro', ['remo cardio', 'rowing', 'concept2', 'maquina de remo'], 'cardio', 'cardio', [], [], 'M', 0, 'cardio'],
   ['escaleras', 'Escaleras (stairmaster)', ['stairmaster', 'escaladora', 'escaleras'], 'cardio', 'cardio', [], [], 'M', 0, 'cardio'],
 ].map(([id, n, a, eq, pat, p, s, len, inc, type]) => ({ id, n, a, eq, pat, p, s, len, inc, type: type || 'reps' }));
+/* Ejercicios unilaterales: cada serie se hace con un lado y luego con el otro. */
+const UNI = new Set(['remo_mancuerna', 'sentadilla_bulgara', 'zancadas', 'step_up', 'curl_bayesian', 'patada_gluteo', 'patada_triceps', 'pallof', 'elevaciones_laterales_polea']);
 const EXI = {};
 EX.forEach((e) => { EXI[e.id] = e; e._names = [e.n].concat(e.a).map(norm); });
 
@@ -1664,6 +1667,7 @@ function makeEx(o) {
     sets: o.sets || 3, repMin: o.repMin || 8, repMax: o.repMax || o.repMin || 12,
     rest: o.rest || defaultRest(L), w0: o.w0 == null ? null : o.w0, inc: o.inc != null ? o.inc : L ? L.inc : 2.5,
     p: o.p || (L ? L.p.slice() : []), s: o.s || (L ? L.s.slice() : []), type: L ? L.type : (o.type || 'reps'), note: o.note || '',
+    uni: o.uni != null ? !!o.uni : !!(L && UNI.has(L.id)),
   };
 }
 function exKey(e) { return e.lib ? e.lib : 'n:' + norm(e.name); }
@@ -1681,7 +1685,7 @@ function fmtSets(sets, type) {
 function exTarget(e) {
   if (e.type === 'cardio') return (e.repMax || 20) + ' min';
   if (e.type === 'time') return e.sets + ' × ' + (e.repMax || 30) + ' s';
-  return e.sets + ' × ' + (e.repMin === e.repMax ? e.repMax : e.repMin + '–' + e.repMax);
+  return e.sets + ' × ' + (e.repMin === e.repMax ? e.repMax : e.repMin + '–' + e.repMax) + (e.uni ? ' por lado' : '');
 }
 function estDuration(d) {
   const ex = (d && d.exercises) || [];
@@ -1762,6 +1766,7 @@ function normRoutine(R) {
       base.s = Array.isArray(base.s) ? base.s.filter((m) => MUSCLES[m]) : [];
       base.type = base.type || (EXI[base.lib] ? EXI[base.lib].type : 'reps');
       if (base.inc == null) base.inc = EXI[base.lib] ? EXI[base.lib].inc : 2.5;
+      if (base.uni == null) base.uni = UNI.has(base.lib);
       if (!base.rest) base.rest = defaultRest(EXI[base.lib]);
       return base;
     });
@@ -3071,7 +3076,7 @@ ACT.dxEdit = (el) => exEditSheet(+el.dataset.i);
 function exEditSheet(i) {
   const d = dayById(UI.editDay), e = d && d.exercises[i];
   if (!e) return;
-  UI.exEd = { i, p: (e.p || []).slice(), s: (e.s || []).slice() };
+  UI.exEd = { i, p: (e.p || []).slice(), s: (e.s || []).slice(), uni: !!e.uni };
   const isC = e.type === 'cardio', isT = e.type === 'time';
   const restOpts = [45, 60, 75, 90, 120, 150, 180, 240];
   sheet('<form class="form" data-submit="saveExEdit"><label class="field"><span>Nombre</span><input id="exName" type="text" value="' + esc(e.name) + '" maxlength="70"></label>' +
@@ -3081,6 +3086,7 @@ function exEditSheet(i) {
       '<label class="field"><span>Peso inicial</span><input id="exW0" type="text" inputmode="decimal" value="' + (e.w0 == null ? '' : String(e.w0).replace('.', ',')) + '" placeholder="kg"></label><label class="field"><span>Subida</span><input id="exInc" type="text" inputmode="decimal" value="' + String(e.inc == null ? 2.5 : e.inc).replace('.', ',') + '"></label></div>') +
     (isC ? '' : '<div class="field"><span>Músculos principales</span><div class="chips">' + MUSCLE_KEYS.map((m) => '<button type="button" class="chip' + (UI.exEd.p.indexOf(m) >= 0 ? ' on' : '') + '" data-act="exMus" data-m="' + m + '" data-k="p">' + MUSCLES[m].l + '</button>').join('') + '</div></div>' +
       '<div class="field"><span>Secundarios (cuentan media serie)</span><div class="chips">' + MUSCLE_KEYS.map((m) => '<button type="button" class="chip' + (UI.exEd.s.indexOf(m) >= 0 ? ' on' : '') + '" data-act="exMus" data-m="' + m + '" data-k="s">' + MUSCLES[m].l + '</button>').join('') + '</div></div>') +
+    (isC ? '' : '<div class="setrow"><div><b>Unilateral</b><span class="muted small">Cada serie se apunta dos veces: izquierda y derecha</span></div>' + sw(UI.exEd.uni, 'exUni', 'uni') + '</div>') +
     '<label class="field"><span>Nota</span><input id="exNote" type="text" value="' + esc(e.note || '') + '" maxlength="140" placeholder="Agarre, tempo, ajuste de la máquina…"></label>' +
     '<div class="btn-row"><button class="btn btn-danger" type="button" data-act="exDel">' + ic('trash') + 'Quitar</button><button class="btn btn-primary" type="submit">Guardar</button></div></form>', { title: e.name });
 }
@@ -3091,6 +3097,7 @@ ACT.exMus = (el) => {
   if (i < 0 && j >= 0) { other.splice(j, 1); const o = el.closest('form').querySelector('[data-k="' + (k === 'p' ? 's' : 'p') + '"][data-m="' + m + '"]'); if (o) o.classList.remove('on'); }
   el.classList.toggle('on', i < 0);
 };
+ACT.exUni = (el) => { UI.exEd.uni = !UI.exEd.uni; el.classList.toggle('on', UI.exEd.uni); el.setAttribute('aria-checked', String(UI.exEd.uni)); };
 ACT.saveExEdit = () => {
   const d = dayById(UI.editDay), e = d && d.exercises[UI.exEd.i];
   if (!e) return;
@@ -3105,7 +3112,7 @@ ACT.saveExEdit = () => {
     e.rest = Math.round(num(v('exRest'), e.rest || 90));
     e.w0 = v('exW0') === '' ? null : rnd(num(v('exW0'), 0), 2);
     e.inc = Math.max(0, rnd(num(v('exInc'), 2.5), 2));
-    e.p = UI.exEd.p.slice(); e.s = UI.exEd.s.slice();
+    e.p = UI.exEd.p.slice(); e.s = UI.exEd.s.slice(); e.uni = UI.exEd.uni;
   }
   e.note = v('exNote');
   saveRoutine();
@@ -4658,9 +4665,9 @@ function shortVersion(d) {
 function liveEx(e, gym) {
   const sg = suggest(e, gym), n = e.type === 'cardio' ? 1 : Math.max(1, +e.sets || 3);
   return {
-    id: uid('le'), src: e.id, lib: e.lib, name: e.name, p: e.p || [], s: e.s || [], repMin: e.repMin, repMax: e.repMax, rest: e.rest, inc: e.inc, type: e.type || 'reps',
+    id: uid('le'), src: e.id, lib: e.lib, name: e.name, uni: !!e.uni && e.type !== 'cardio', p: e.p || [], s: e.s || [], repMin: e.repMin, repMax: e.repMax, rest: e.rest, inc: e.inc, type: e.type || 'reps',
     why: sg.why, up: !!sg.up, down: !!sg.down, prev: sg.last ? sg.last.sets : null,
-    sets: Array.from({ length: n }, () => ({ w: e.type === 'cardio' ? 0 : sg.w == null ? null : sg.w, r: null, done: false })), note: '',
+    sets: Array.from({ length: e.uni && e.type !== 'cardio' ? n * 2 : n }, (x, i) => Object.assign({ w: e.type === 'cardio' ? 0 : sg.w == null ? null : sg.w, r: null, done: false }, e.uni && e.type !== 'cardio' ? { side: i % 2 ? 'D' : 'I' } : {})), note: '',
   };
 }
 function startWorkout(dayId, o) {
@@ -4729,7 +4736,8 @@ function phReps(e, j) {
   if (e.type === 'cardio') return String(e.repMax || 20);
   return e.repMin === e.repMax ? String(e.repMax) : e.repMin + '–' + e.repMax;
 }
-function liveTarget(e) { return exTarget(Object.assign({}, e, { sets: e.sets.length })); }
+function liveTarget(e) { return exTarget(Object.assign({}, e, { sets: e.uni ? Math.ceil(e.sets.length / 2) : e.sets.length })); }
+const setLabel = (e, j) => (e.sets[j] && e.sets[j].side ? (Math.floor(j / 2) + 1) + ' ' + (e.sets[j].side === 'I' ? 'izq.' : 'der.') : String(j + 1));
 function wkExCard(e, i) {
   const done = e.sets.length && e.sets.every((s) => s.done), isC = e.type === 'cardio', isT = e.type === 'time';
   return '<section class="wk-ex' + (done ? ' is-done' : '') + '" id="wkx-' + i + '"><div class="wk-ex-h"><div><h3>' + esc(e.name) + '</h3><p class="muted small">' + liveTarget(e) + (e.rest && !isC ? ' · descanso ' + fmtRest(e.rest) : '') + '</p></div><button class="icon-btn" data-act="wkExMenu" data-e="' + i + '" aria-label="Opciones de ' + esc(e.name) + '">' + ic('more') + '</button></div>' +
@@ -4738,10 +4746,10 @@ function wkExCard(e, i) {
     '<div class="sets"><div class="set-h"><span style="text-align:center">Serie</span><span style="text-align:center">' + (isC ? '' : isT ? 'Lastre' : 'Peso') + '</span><span style="text-align:center">' + (isC ? 'Minutos' : isT ? 'Segundos' : 'Reps') + '</span><span></span></div>' +
     e.sets.map((s, j) => {
       const wTxt = isC ? '<span class="muted">—</span>' : s.w == null ? '<span class="muted">kg</span>' : (+s.w === 0 && (e.inc === 0 || isT) ? '<span class="muted">Corporal</span>' : fmtKg(s.w) + ' <small>kg</small>');
-      return '<div class="set' + (s.done ? ' done' : '') + '"><span class="set-n">' + (j + 1) + '</span><button class="set-w" data-act="wkSet" data-e="' + i + '" data-s="' + j + '" data-f="w" aria-label="Peso serie ' + (j + 1) + '"' + (isC ? ' disabled' : '') + '>' + wTxt + '</button>' +
-        '<button class="set-r" data-act="wkSet" data-e="' + i + '" data-s="' + j + '" aria-label="Repeticiones serie ' + (j + 1) + '">' + (s.r != null ? '<b>' + s.r + '</b>' : '<span class="ph">' + phReps(e, j) + '</span>') + '</button><span class="set-ok">' + (s.done ? ic('check') : '') + '</span></div>';
+      return '<div class="set' + (s.done ? ' done' : '') + (s.side === 'D' ? ' side-d' : '') + '"><span class="set-n">' + setLabel(e, j) + '</span><button class="set-w" data-act="wkSet" data-e="' + i + '" data-s="' + j + '" data-f="w" aria-label="Peso serie ' + setLabel(e, j) + '"' + (isC ? ' disabled' : '') + '>' + wTxt + '</button>' +
+        '<button class="set-r" data-act="wkSet" data-e="' + i + '" data-s="' + j + '" aria-label="Repeticiones serie ' + setLabel(e, j) + '">' + (s.r != null ? '<b>' + s.r + '</b>' : '<span class="ph">' + phReps(e, j) + '</span>') + '</button><span class="set-ok">' + (s.done ? ic('check') : '') + '</span></div>';
     }).join('') + '</div>' +
-    '<div class="wk-ex-f"><button class="link" data-act="wkAddSet" data-e="' + i + '">' + ic('plus') + 'Serie</button>' + (e.sets.length > 1 ? '<button class="link" data-act="wkDelSet" data-e="' + i + '">Quitar serie</button>' : '') + '<button class="link" data-act="wkNote" data-e="' + i + '">' + (e.note ? 'Nota ✓' : 'Nota') + '</button></div></section>';
+    '<div class="wk-ex-f"><button class="link" data-act="wkAddSet" data-e="' + i + '">' + ic('plus') + 'Serie</button>' + (e.sets.length > (e.uni ? 2 : 1) ? '<button class="link" data-act="wkDelSet" data-e="' + i + '">Quitar serie</button>' : '') + '<button class="link" data-act="wkNote" data-e="' + i + '">' + (e.note ? 'Nota ✓' : 'Nota') + '</button></div></section>';
 }
 function renderWorkout() {
   const L = S.live, box = $('#workout');
@@ -4783,7 +4791,7 @@ function openRepSheet(i, j, focusW) {
     (isC ? '' : '<div class="wstep"><button class="icon-btn lg" data-act="wAdj" data-d="-1" aria-label="Menos peso">−</button><div class="wstep-v"><input id="wIn" type="text" inputmode="decimal" value="' + (w == null ? '' : String(w).replace('.', ',')) + '" placeholder="0" aria-label="Peso en kg"><span>kg</span></div><button class="icon-btn lg" data-act="wAdj" data-d="1" aria-label="Más peso">+</button></div>') +
     '<p class="eyebrow">Toca las ' + unit + '</p><div class="repgrid">' + repChips(e).map((r) => '<button class="rep' + (r >= e.repMin && r <= e.repMax && !isC ? ' in' : '') + (r === prevR ? ' prev' : '') + (s.r === r ? ' on' : '') + '" data-act="repPick" data-r="' + r + '">' + r + '</button>').join('') + '</div>' +
     '<form class="rep-other" data-submit="repSave"><input id="rIn" type="text" inputmode="numeric" placeholder="Otra cantidad" aria-label="' + unit + '"><button class="btn" type="submit">Guardar</button></form>' +
-    (s.done ? '<button class="btn btn-ghost wide danger-t" data-act="repClear">Borrar esta serie</button>' : ''), { title: e.name + ' · serie ' + (j + 1) });
+    (s.done ? '<button class="btn btn-ghost wide danger-t" data-act="repClear">Borrar esta serie</button>' : ''), { title: e.name + ' · serie ' + setLabel(e, j) });
   UI.rep = { i, j, inc, sh };
   if (focusW) setTimeout(() => { const x = $('#wIn', sh.el); if (x) x.select(); }, 280);
 }
@@ -4820,7 +4828,8 @@ function saveRep(r) {
   s.r = r; s.done = true; s.t = Date.now();
   for (let k = R.j + 1; k < e.sets.length; k++) if (!e.sets[k].done) e.sets[k].w = s.w;
   R.sh.close();
-  if (!was && S.settings.autoRest && e.type !== 'cardio' && !isLastSet(R.i, R.j)) {
+  // En unilaterales no hay descanso entre el lado izquierdo y el derecho de la misma serie.
+  if (!was && S.settings.autoRest && e.type !== 'cardio' && s.side !== 'I' && !isLastSet(R.i, R.j)) {
     const sec = +e.rest || S.settings.restSec;
     L.rest = { until: Date.now() + sec * 1000, total: sec };
   }
@@ -4873,12 +4882,20 @@ ACT.wkRestSkip = () => { if (S.live) { S.live.rest = null; saveLive(); updateRes
 /* ---------- editar el entreno en curso ---------- */
 ACT.wkAddSet = (el) => {
   const e = S.live.ex[+el.dataset.e], last = e.sets[e.sets.length - 1];
-  e.sets.push({ w: last ? last.w : null, r: null, done: false });
+  if (e.uni) ['I', 'D'].forEach((side) => e.sets.push({ w: last ? last.w : null, r: null, done: false, side }));
+  else e.sets.push({ w: last ? last.w : null, r: null, done: false });
   saveLive();
   renderWorkout();
 };
 ACT.wkDelSet = (el) => {
   const e = S.live.ex[+el.dataset.e];
+  if (e.uni) {
+    if (e.sets.length <= 2) return;
+    let k = -1;
+    for (let x = e.sets.length - 2; x >= 0; x -= 2) if (!e.sets[x].done && !e.sets[x + 1].done) { k = x; break; }
+    e.sets.splice(k >= 0 ? k : e.sets.length - 2, 2);
+    saveLive(); renderWorkout(); return;
+  }
   if (e.sets.length <= 1) return;
   let k = -1;
   for (let x = e.sets.length - 1; x >= 0; x--) if (!e.sets[x].done) { k = x; break; }
@@ -4962,7 +4979,7 @@ ACT.wkFinish = async () => {
 ACT.pickFeel = (el) => { UI.feel = el.dataset.f; $$('#feelChips .chip').forEach((c) => c.classList.toggle('on', c === el)); };
 ACT.wkSave = () => {
   const L = S.live, end = Date.now();
-  const ex = L.ex.map((e) => ({ id: e.src || e.id, lib: e.lib, name: e.name, p: e.p, s: e.s, repMin: e.repMin, repMax: e.repMax, type: e.type, sets: e.sets.filter((s) => s.done && s.r > 0).map((s) => ({ w: s.w == null ? 0 : s.w, r: s.r })), note: e.note || '' })).filter((e) => e.sets.length);
+  const ex = L.ex.map((e) => ({ id: e.src || e.id, lib: e.lib, name: e.name, p: e.p, s: e.s, repMin: e.repMin, repMax: e.repMax, type: e.type, sets: e.sets.filter((s) => s.done && s.r > 0).map((s) => Object.assign({ w: s.w == null ? 0 : s.w, r: s.r }, s.side ? { side: s.side } : {})), note: e.note || '', uni: !!e.uni })).filter((e) => e.sets.length);
   const rec = {
     id: L.id, date: L.date, start: L.start, end, dur: Math.max(1, Math.round((end - L.start) / 60000)), dayId: L.dayId, dayName: L.dayName, short: !!L.short, gym: L.gym || '',
     ex, vol: Math.round(sum(ex, (e) => (e.type === 'reps' ? sum(e.sets, (s) => (+s.w || 0) * s.r) : 0))), prs: computePRs(ex, L.gym), feel: UI.feel || null, note: (($('#finNote') || {}).value || '').trim(),
