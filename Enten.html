@@ -1612,7 +1612,7 @@ function splitActions(text) {
 // ---- 04-logic.js ----
 /* ============ Enten · estado y lógica ============ */
 const S = { loaded: false, profile: null, settings: null, routine: null, live: null, sessions: [], food: {}, health: {}, cal: {}, fasting: null, chat: null, myfoods: null, ver: 0 };
-const DEF_SETTINGS = { gyms: ['DiR', 'Aqua'], gym: null, restSec: 90, autoRest: true, sound: true, keepAwake: true, stepGoal: 8000, waterGoal: 0, kcalSource: 'auto', targets: { mode: 'auto' }, fastPlan: '16:8', lastSync: null, startDate: null };
+const DEF_SETTINGS = { gyms: ['DiR', 'Aqua', 'Basic Fit'], gym: null, restSec: 90, autoRest: true, sound: true, keepAwake: true, stepGoal: 8000, waterGoal: 0, kcalSource: 'auto', targets: { mode: 'auto' }, fastPlan: '16:8', lastSync: null, startDate: null };
 const IDX = { v: -1, byDate: {}, hist: {} };
 
 function bump() { S.ver++; }
@@ -1704,7 +1704,12 @@ function dayMuscles(d) {
 
 /* Gimnasios: cada entreno se guarda con el suyo y los pesos se comparan solo dentro del mismo gimnasio,
    porque las máquinas y las poleas de cada sitio no pesan igual. */
-function gyms() { const g = (S.settings && S.settings.gyms) || []; return g.length ? g : ['DiR', 'Aqua']; }
+function gyms() {
+  const st = S.settings || {}, g = st.gyms || [];
+  // Quien ya tenía guardados solo DiR y Aqua recibe también Basic Fit.
+  if (g.length === 2 && g[0] === 'DiR' && g[1] === 'Aqua' && !st.gymsV2) { st.gyms = g.concat('Basic Fit'); st.gymsV2 = true; saveSettings(); }
+  return st.gyms && st.gyms.length ? st.gyms : ['DiR', 'Aqua', 'Basic Fit'];
+}
 function curGym() { const g = gyms(); return (S.settings && g.indexOf(S.settings.gym) >= 0) ? S.settings.gym : g[0]; }
 function histFor(k, gym) { const all = idx().hist[k] || []; return gym ? all.filter((h) => h.gym === gym) : all; }
 
